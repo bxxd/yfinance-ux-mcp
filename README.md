@@ -12,28 +12,51 @@ Model Context Protocol server for Yahoo Finance market data.
 
 ## Installation
 
+### 1. Clone and install dependencies
+
 ```bash
-cd /home/ubuntu/idio/yfinance-mcp
+git clone https://github.com/bxxd/yfinance-mcp.git
+cd yfinance-mcp
 poetry install
 ```
 
-## Configuration
+### 2. Configure Claude Code
 
-Add to `~/.config/claude/mcp.json`:
+**Method 1: Using claude CLI (recommended)**
+
+From your project directory:
+
+```bash
+claude mcp add yfinance poetry run python server.py --cwd /path/to/yfinance-mcp
+```
+
+**Method 2: Manual configuration**
+
+Add to `~/.claude.json` under your project's `mcpServers`:
 
 ```json
 {
-  "mcpServers": {
-    "yfinance": {
-      "command": "poetry",
-      "args": ["run", "python", "server.py"],
-      "cwd": "/home/ubuntu/idio/yfinance-mcp"
+  "projects": {
+    "/path/to/your/project": {
+      "mcpServers": {
+        "yfinance": {
+          "type": "stdio",
+          "command": "poetry",
+          "args": ["run", "python", "server.py"],
+          "cwd": "/path/to/yfinance-mcp",
+          "env": {}
+        }
+      }
     }
   }
 }
 ```
 
-Restart Claude Code to load the MCP server.
+**Note:** MCP servers in Claude Code are configured per-project in `~/.claude.json`, not in `~/.config/claude/mcp.json`.
+
+### 3. Restart Claude Code
+
+After configuration, restart Claude Code to load the MCP server.
 
 ## Usage
 

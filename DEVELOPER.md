@@ -326,6 +326,24 @@ Add features only when:
 - No performance problem observed
 - Don't add it
 
+## Security and Best Practices
+
+**🚨 NEVER HARDCODE VALUES**
+- No hardcoded paths, usernames, URLs, or configuration in code/docs
+- Use environment variables for sensitive data
+- Keep examples generic (use `/path/to/project`, not actual system paths)
+- Documentation should work for any user, not just the original developer
+
+**🚨 NEVER COMMIT SECRETS**
+- No API keys, tokens, or credentials in code
+- Use environment variables: `os.environ.get('API_KEY', '')`
+- Add `.env` files to `.gitignore`
+
+**Keep it simple:**
+- No premature optimization
+- No features without proven need
+- Match manual testing exactly
+
 ## File Structure
 
 ```
