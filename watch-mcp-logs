@@ -1,0 +1,29 @@
+#!/bin/bash
+# Watch idio-yf MCP server logs in real-time
+
+LOG_DIR="$HOME/.cache/claude-cli-nodejs/-home-ubuntu-idio/mcp-logs-idio-yf"
+
+echo "MCP logs location: $LOG_DIR"
+echo "================================================"
+echo ""
+
+# Get the latest log file
+LATEST=$(ls -t "$LOG_DIR"/*.txt 2>/dev/null | head -1)
+
+if [ -z "$LATEST" ]; then
+    echo "No log files found yet. Waiting for connection..."
+    # Watch directory for new files
+    while [ -z "$LATEST" ]; do
+        sleep 1
+        LATEST=$(ls -t "$LOG_DIR"/*.txt 2>/dev/null | head -1)
+    done
+fi
+
+echo "Watching: $LATEST"
+echo "================================================"
+echo ""
+
+# Pretty print JSON logs
+tail -f "$LATEST" | while read line; do
+    echo "$line" | jq -C '.' 2>/dev/null || echo "$line"
+done

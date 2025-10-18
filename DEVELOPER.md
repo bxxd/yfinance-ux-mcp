@@ -2,6 +2,221 @@
 
 Custom Model Context Protocol server for Yahoo Finance data - built for idio project.
 
+## Core Engineering Principles
+
+### Separation of Concerns
+
+**All code belongs in the package, not scattered in root.**
+
+- `yfmcp/` - Core package (business logic, testable independently)
+  - `market_data.py` - Market data functions (no MCP dependencies)
+  - `server.py` - MCP protocol wrapper (thin layer)
+  - `cli.py` - CLI tools
+- `tests/` - Tests (standard Python convention)
+- `docs/` - Documentation and exploration scripts
+
+**Clean boundaries:**
+- Business logic has ZERO MCP dependencies
+- Protocol layer is a thin wrapper
+- Each module has one clear responsibility
+
+### Single Source of Truth (One True Path)
+
+**Every piece of data and logic should live in exactly ONE place.**
+
+- Market symbols → `MARKET_SYMBOLS` dict in `market_data.py`
+- Market hours logic → `is_market_open()` function
+- Formatting logic → `format_market_snapshot()` function
+- MCP protocol → `server.py` only
+
+**No duplication.** If you need the same data or logic elsewhere, import it. Don't copy it.
+
+### DRY (Don't Repeat Yourself)
+
+**Corollary to Single Source of Truth.**
+
+If you find yourself writing the same code twice:
+1. Stop
+2. Extract it to a function/constant
+3. Import it where needed
+
+### No Root Clutter
+
+**Keep root directory clean.** All application code goes in `yfmcp/` package.
+
+**What belongs in root:**
+- `pyproject.toml` - Project config
+- `README.md` - User docs
+- `DEVELOPER.md` - This file
+- `CLAUDE.md` - Import reference
+
+**What doesn't belong in root:**
+- ~~server.py~~ → `yfmcp/server.py`
+- ~~cli.py~~ → `yfmcp/cli.py`
+- ~~test_core.py~~ → `tests/test_core.py`
+
+### Strict Type Checking & Linting (Rust-Style)
+
+**Zero warnings, zero errors. Clean code means no warnings.**
+
+We use strict type checking (mypy) and comprehensive linting (ruff) to catch errors at development time, like Rust's compiler.
+
+**Run checks before committing:**
+```bash
+# ALWAYS run before committing
+make all        # Run lint + test (full check)
+
+# Individual commands
+make lint       # Run mypy + ruff
+make test       # Run tests
+make lint-fix   # Auto-fix linting issues
+
+# Or use poetry directly
+poetry run mypy yfmcp/
+poetry run ruff check yfmcp/
+```
+
+**All code must:**
+- Have complete type annotations (functions, parameters, return values)
+- Pass mypy strict mode (no `Any` without justification)
+- Pass ruff comprehensive checks (100+ rules enabled)
+- Have no warnings or errors
+
+**Configuration** (in `pyproject.toml`):
+- **mypy**: `strict = true` + additional checks (warn_unused_ignores, warn_return_any, etc.)
+- **ruff**: Comprehensive rule set (Pyflakes, pycodestyle, isort, flake8-annotations, flake8-bugbear, pylint, and more)
+- **Line length**: 100 characters max
+
+**Benefits:**
+- Catch errors before runtime (like Rust)
+- Self-documenting code (types show intent)
+- Better IDE support (autocomplete, refactoring)
+- Easier onboarding (types explain interfaces)
+
+**When to suppress:**
+- External libraries without type stubs (`# type: ignore[import-untyped]`)
+- MCP decorators (`# type: ignore[misc]`)
+- Specific rule violations with justification (`# noqa: PLR0912` with comment explaining why)
+
+### Development Practices
+
+**Clean code standards - enforced by linter and type checker.**
+
+**Imports:**
+- **Always at top of file** - Never import inside functions (except when absolutely necessary for circular dependencies)
+- **Sorted automatically** - ruff handles import sorting (isort)
+- **One import per line** for clarity
+
+**Before declaring work done:**
+```bash
+# ALWAYS run before committing
+make lint    # Fix and check linting
+make test    # Run all tests
+```
+
+**Code organization:**
+- **One function, one responsibility** - Keep functions focused
+- **Descriptive names** - `get_ticker_data()` not `get_data()`
+- **Type everything** - Functions, parameters, return values, variables
+- **Constants at top** - `WEEKEND_START_DAY = 5` not magic numbers in code
+- **No dead code** - Delete it, don't comment it out (we have git)
+
+**Error handling:**
+- **Assign f-strings before raising** - `msg = f"Error: {x}"; raise ValueError(msg)`
+- **Specific exceptions** - `ValueError` not `Exception`
+- **Let it fail** - Don't catch exceptions unless you can handle them
+
+**Performance:**
+
+**Python is Python - it's not our biggest problem. Just don't be sloppy.**
+
+*Core principles:*
+- **Use the right data structures** - Dict for lookups (O(1)), not list (O(n))
+- **Don't repeat work** - Cache lookups, use comprehensions
+- **Simple > clever** - Direct code beats fancy patterns
+- **Profile if it matters** - Use `cProfile` or `py-spy` when something is actually slow
+
+*Python performance rules:*
+1. **Use built-ins** - `sum()`, `max()`, `min()` are C-optimized
+2. **List comprehensions** - Faster than `for` loops: `[x*2 for x in items]`
+3. **Avoid repeated lookups** - Cache `obj.attr` in local variable
+4. **Local variables are fast** - Don't use globals in tight loops
+5. **Dict lookups O(1)** - Use dicts for fast lookups, not lists O(n)
+6. **Generator expressions** - Use `(x for x in items)` for large datasets
+7. **`join()` for strings** - `"".join(items)` not `s += item` in loop
+8. **Avoid exceptions for flow** - Exceptions are expensive (use `if` checks)
+9. **Use `set` for membership** - `x in myset` O(1) vs `x in mylist` O(n)
+10. **Minimize function calls** - Function call overhead adds up in loops
+
+*Examples:*
+```python
+# SLOW - repeated attribute lookup
+for item in items:
+    result.append(item.lower())
+
+# FAST - cache method reference
+lower = str.lower
+for item in items:
+    result.append(lower(item))
+
+# EVEN FASTER - list comprehension (built-in)
+result = [item.lower() for item in items]
+```
+
+```python
+# SLOW - string concatenation in loop
+result = ""
+for s in strings:
+    result += s
+
+# FAST - join
+result = "".join(strings)
+```
+
+```python
+# SLOW - linear search
+if symbol in symbol_list:  # O(n)
+    ...
+
+# FAST - set/dict lookup
+if symbol in symbol_set:  # O(1)
+    ...
+```
+
+*Profiling (find real bottlenecks):*
+```bash
+# Profile with cProfile (built-in)
+python -m cProfile -s cumulative -m yfmcp.server
+
+# Or use py-spy for live profiling (install: pip install py-spy)
+py-spy top --pid <process_id>
+
+# Time specific operations
+import time
+start = time.perf_counter()
+result = expensive_function()
+elapsed = time.perf_counter() - start
+print(f"Took {elapsed:.4f}s")
+
+# Benchmark with timeit (for small code snippets)
+python -m timeit -s "from yfmcp.market_data import get_ticker_data" \
+  "get_ticker_data('AAPL')"
+```
+
+*When to optimize:*
+- **When something is actually slow** - Profile first, don't guess
+- **Never prematurely** - Good code structure first, then optimize if needed
+
+*Reality check for this codebase:*
+- **Bottleneck**: yfinance API calls (network I/O)
+- **Not the bottleneck**: Our Python code
+- **Takeaway**: Write clean code with good data structures. Don't micro-optimize Python.
+
+**Testing:**
+- **Test business logic** - `tests/test_core.py` tests `market_data.py` independently
+- **No MCP in tests** - Test core functions without protocol layer
+- **All tests must pass** before declaring done
+
 ## Design Philosophy
 
 ### 1. Keep It Simple
@@ -248,7 +463,7 @@ Raw data:
 
 ## Code Structure
 
-### Core Functions
+### Core Functions (yfmcp/market_data.py)
 
 **`is_market_open()`** - Detects US market hours (9:30 AM - 4:00 PM ET, Mon-Fri)
 
@@ -267,7 +482,7 @@ Raw data:
 - Friendly names (S&P 500 instead of es_futures)
 - Proper formatting ($, %, alignment)
 
-### MCP Integration
+### MCP Integration (yfmcp/server.py)
 
 **`list_tools()`** - Defines single tool: `get_market_data`
 
@@ -276,14 +491,16 @@ Raw data:
 - `current` - Single ticker current price
 - `history` - Historical price data
 
+**Thin wrapper** - Imports from `market_data.py`, handles MCP protocol only
+
 ## Testing Approach
 
 ### Manual Testing First
 
 ```bash
-cd /home/ubuntu/idio/yfinance-mcp
+cd /path/to/yfinance-mcp
 poetry run python -c "
-from server import get_market_snapshot, format_market_snapshot
+from yfmcp.market_data import get_market_snapshot, format_market_snapshot
 
 data = get_market_snapshot(['futures', 'crypto', 'commodities'])
 print(format_market_snapshot(data))
@@ -291,6 +508,38 @@ print(format_market_snapshot(data))
 ```
 
 This must output exactly what you want before wrapping in MCP.
+
+**Note:** Core functions in `yfmcp/market_data.py` are testable independently (no MCP required).
+
+### CLI Testing (No MCP Required)
+
+Test the MCP server locally without Claude Code using the CLI tool:
+
+```bash
+# List available tools (what Claude sees)
+./cli list-tools
+
+# Call a tool (what Claude receives)
+./cli call get_market_data --data_type snapshot --categories futures,crypto
+./cli call get_market_data --data_type current --symbol AAPL
+./cli call get_market_data --data_type history --symbol TSLA --period 3mo
+```
+
+**Zero drift:** CLI uses the actual MCP server handlers, so output matches exactly what Claude receives.
+
+### Unit Testing
+
+Run the test suite:
+
+```bash
+poetry run python tests/test_core.py
+```
+
+Tests verify:
+- Market hours detection
+- Single ticker fetch
+- Market snapshot
+- Output formatting
 
 ### MCP Testing
 
@@ -348,11 +597,32 @@ Add features only when:
 
 ```
 yfinance-mcp/
-├── server.py           # MCP server implementation
-├── pyproject.toml      # Poetry dependencies
+├── yfmcp/              # Core package (all application code)
+│   ├── __init__.py
+│   ├── server.py       # MCP protocol wrapper
+│   ├── market_data.py  # Core business logic
+│   └── cli.py          # CLI tools
+├── tests/              # Tests (testable independently)
+│   └── test_core.py
+├── docs/               # Documentation & exploration
+│   └── explore_yfinance.py
+├── tasks/              # Task tracking
+├── cli                 # Bash wrapper for CLI
+├── Makefile            # Development commands (make test, make lint, make all)
+├── pyproject.toml      # Poetry dependencies + mypy/ruff config
 ├── DEVELOPER.md        # This file - developer context
 ├── CLAUDE.md           # Import reference for Claude Code
 └── README.md           # User documentation
+```
+
+**Key principle:** All application code lives in `yfmcp/` package. Root is clean (only config, docs, and CLI wrapper).
+
+**Development workflow:**
+```bash
+make all    # Run lint + test (ALWAYS before committing)
+make test   # Run tests only
+make lint   # Run type checking + linting
+make serve  # Run MCP server (stdio mode)
 ```
 
 ## Dependencies
@@ -370,12 +640,20 @@ No extras. No optional dependencies. Keep it minimal.
 
 ## Summary
 
-**Core principle:** Build the simplest thing that solves the real problem, test it manually first, then wrap in MCP matching the manual implementation exactly.
+**Engineering Principles:**
+- **Separation of Concerns** - Business logic (zero MCP deps) + thin protocol wrapper
+- **Single Source of Truth** - One true path for every piece of data/logic
+- **No Root Clutter** - All application code in `yfmcp/` package
+- **DRY** - Don't repeat yourself, import instead
+- **Strict Checking** - Zero warnings/errors (mypy strict + ruff comprehensive)
+- **High Standards** - Don't be sloppy (use right data structures, clean code, no premature optimization)
 
-**PMF testing:** Build → Use → Iterate. Real usage reveals what's needed. Speculation adds complexity without value.
+**Design Philosophy:**
+- **Keep It Simple** - Build the simplest thing that solves the real problem
+- **Test Manually First** - Prove it works before wrapping in MCP
+- **Human-Readable Output** - Format for humans, not machines
+- **Single Flexible Tool** - One tool that adapts beats many narrow tools
 
-**Human-readable output:** Format for humans, not machines. The AI should receive ready-to-use information.
-
-**Single flexible tool:** One tool that adapts beats many narrow tools.
+**PMF Testing:** Build → Use → Iterate. Real usage reveals what's needed. Speculation adds complexity without value.
 
 This is infrastructure for investment analysis. Keep it simple, keep it working, extend only when proven necessary.

@@ -1,6 +1,10 @@
-# yfinance MCP Server
+# idio-yfinance-mcp
 
-Model Context Protocol server for Yahoo Finance market data.
+Market data tools for idiosyncratic alpha analysis. Powered by yfinance.
+
+**Local MCP server (stdio)** - Runs locally on your machine, connects to Claude Code via standard I/O.
+
+Provides fast access to market snapshots, price data, and historical analysis.
 
 ## Features
 
@@ -15,35 +19,68 @@ Model Context Protocol server for Yahoo Finance market data.
 ### 1. Clone and install dependencies
 
 ```bash
-git clone https://github.com/bxxd/yfinance-mcp.git
-cd yfinance-mcp
+git clone https://github.com/bxxd/idio-yfinance-mcp.git
+cd idio-yfinance-mcp
 poetry install
 ```
 
 ### 2. Configure Claude Code
 
-**Method 1: Using claude CLI (recommended)**
+**Note:** This is a local stdio MCP server. It runs on your machine and connects to Claude Code via standard I/O (not HTTP/network). All data stays local.
+
+**Method 1: Using make -C (recommended)**
 
 From your project directory:
 
 ```bash
-claude mcp add yfinance poetry run python server.py --cwd /path/to/yfinance-mcp
+claude mcp add idio-yf make -C /absolute/path/to/yfinance-mcp serve
 ```
 
-**Method 2: Manual configuration**
-
-Add to `~/.claude.json` under your project's `mcpServers`:
+Or manually add to `~/.claude.json` under your project's `mcpServers`:
 
 ```json
 {
   "projects": {
     "/path/to/your/project": {
       "mcpServers": {
-        "yfinance": {
+        "idio-yf": {
+          "type": "stdio",
+          "command": "make",
+          "args": ["-C", "/absolute/path/to/yfinance-mcp", "serve"],
+          "env": {}
+        }
+      }
+    }
+  }
+}
+```
+
+**Why this approach?**
+- Single source of truth (Makefile defines the server command)
+- No need to remember poetry/python invocation details
+- Self-documenting (Makefile is version controlled)
+- Works from any directory (make -C handles working directory)
+
+**Method 2: Direct command (alternative)**
+
+If you prefer not to use make:
+
+```bash
+claude mcp add idio-yf poetry run python -m yfmcp.server --cwd /path/to/yfinance-mcp
+```
+
+Or manually:
+
+```json
+{
+  "projects": {
+    "/path/to/your/project": {
+      "mcpServers": {
+        "idio-yf": {
           "type": "stdio",
           "command": "poetry",
-          "args": ["run", "python", "server.py"],
-          "cwd": "/path/to/yfinance-mcp",
+          "args": ["run", "python", "-m", "yfmcp.server"],
+          "cwd": "/absolute/path/to/yfinance-mcp",
           "env": {}
         }
       }
@@ -58,6 +95,8 @@ Add to `~/.claude.json` under your project's `mcpServers`:
 
 After configuration, restart Claude Code to load the MCP server.
 
+**How it works:** Claude Code launches the MCP server as a subprocess and communicates via stdin/stdout. All processing happens locally on your machine.
+
 ## Usage
 
 ### Market Snapshot (Auto)
@@ -65,7 +104,7 @@ After configuration, restart Claude Code to load the MCP server.
 No parameters needed - automatically shows relevant data based on time:
 
 ```python
-mcp__yfinance__get_market_data()
+mcp__idio_yf__get_market_data()
 ```
 
 **During market hours** (9:30 AM - 4:00 PM ET, Mon-Fri):
@@ -83,7 +122,7 @@ mcp__yfinance__get_market_data()
 Specify which categories to show:
 
 ```python
-mcp__yfinance__get_market_data(
+mcp__idio_yf__get_market_data(
     data_type='snapshot',
     categories=['futures', 'europe', 'asia', 'crypto']
 )
@@ -103,7 +142,7 @@ mcp__yfinance__get_market_data(
 Get current price for any stock:
 
 ```python
-mcp__yfinance__get_market_data(
+mcp__idio_yf__get_market_data(
     data_type='current',
     symbol='AAPL'
 )
@@ -114,7 +153,7 @@ mcp__yfinance__get_market_data(
 Fetch price history:
 
 ```python
-mcp__yfinance__get_market_data(
+mcp__idio_yf__get_market_data(
     data_type='history',
     symbol='TSLA',
     period='3mo'
@@ -149,7 +188,59 @@ Clean, readable, immediately useful.
 
 ## Development
 
-See `CLAUDE.md` for design philosophy, development process, and methodology.
+### Quick Start
+
+**Using Makefile (recommended):**
+
+```bash
+make all        # Run lint + test (ALWAYS before committing)
+make test       # Run tests
+make lint       # Run type checking + linting
+make lint-fix   # Auto-fix linting issues
+make serve      # Run MCP server (stdio mode)
+make help       # Show all commands
+```
+
+**Manual testing (no MCP required):**
+
+```bash
+# Run tests
+poetry run python tests/test_core.py
+
+# Test core functions directly
+poetry run python -c "
+from yfmcp.market_data import get_market_snapshot, format_market_snapshot
+data = get_market_snapshot(['futures', 'crypto'])
+print(format_market_snapshot(data))
+"
+```
+
+### Project Structure
+
+```
+idio-yfinance-mcp/
+├── yfmcp/              # Core package (all application code)
+│   ├── server.py       # MCP protocol wrapper
+│   ├── market_data.py  # Core business logic (testable independently)
+│   └── cli.py          # CLI tools
+├── tests/              # Tests
+│   └── test_core.py
+├── docs/               # Documentation & exploration
+├── Makefile            # Development commands
+└── pyproject.toml      # Poetry config + mypy/ruff settings
+```
+
+### Documentation
+
+- **DEVELOPER.md** - Design philosophy, engineering principles, development process
+- **CLAUDE.md** - Import reference for Claude Code
+
+### Design Principles
+
+- **Separation of Concerns** - Business logic has zero MCP dependencies
+- **Single Source of Truth** - One true path for every piece of data/logic
+- **Human-Readable Output** - Format for humans, not machines
+- **Keep It Simple** - Match manual testing exactly, no overengineering
 
 ## License
 
