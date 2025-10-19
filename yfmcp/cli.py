@@ -105,6 +105,11 @@ Examples:
     )
     call_parser.add_argument("--symbol", help="Ticker symbol (e.g., TSLA, AAPL)")
     call_parser.add_argument("--period", help="Period for history (e.g., 1mo, 3mo, 1y)")
+    call_parser.add_argument(
+        "--show_momentum",
+        action="store_true",
+        help="Show trailing returns (1M, 1Y) for momentum analysis"
+    )
 
     return parser.parse_args()
 
@@ -132,6 +137,8 @@ async def main() -> int:
         tool_args["symbol"] = args.symbol
     if args.period:
         tool_args["period"] = args.period
+    if args.show_momentum:
+        tool_args["show_momentum"] = True
 
     return await call_tool_command(args.tool, tool_args)
 

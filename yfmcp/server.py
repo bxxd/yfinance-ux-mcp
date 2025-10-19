@@ -59,10 +59,16 @@ Use standard Yahoo tickers (e.g., AAPL, ^GSPC, BTC-USD). Output: Formatted text 
                             "type": "string",
                             "enum": [
                                 "us", "futures", "factors", "europe", "asia",
-                                "crypto", "commodities", "bonds", "all"
+                                "crypto", "commodities", "bonds", "volatility", "rates",
+                                "sectors", "styles", "currencies", "all"
                             ]
                         },
                         "description": "Market categories (for snapshot only)"
+                    },
+                    "show_momentum": {
+                        "type": "boolean",
+                        "description": "Show trailing returns (1M, 1Y) for momentum analysis",
+                        "default": False
                     },
                     "symbol": {
                         "type": "string",
@@ -92,7 +98,8 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:  # noqa: AN
 
     if data_type == "snapshot":
         categories = arguments.get("categories", [])
-        data = get_market_snapshot(categories)
+        show_momentum = arguments.get("show_momentum", False)
+        data = get_market_snapshot(categories, show_momentum)
         formatted = format_market_snapshot(data)
         return [TextContent(type="text", text=formatted)]
 

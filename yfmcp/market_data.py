@@ -3,6 +3,7 @@ Core market data functionality - yfinance business logic
 Testable independently of MCP protocol layer
 """
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -13,23 +14,38 @@ import yfinance as yf  # type: ignore[import-untyped]
 WEEKEND_START_DAY = 5  # Saturday (Monday = 0, Sunday = 6)
 
 # Category to symbol mappings (for get_market_snapshot)
+# Aligned with Paleologo factor framework
 CATEGORY_MAPPING: dict[str, list[str]] = {
-    "us": ["sp500", "nasdaq", "dow"],
+    "us": ["sp500", "nasdaq", "dow", "russell2000"],
     "futures": ["es_futures", "nq_futures", "ym_futures"],
-    "factors": ["gold", "btc", "vix", "oil_wti", "natgas", "us10y"],
-    "europe": ["stoxx50", "dax", "ftse"],
-    "asia": ["nikkei", "hangseng", "shanghai"],
-    "crypto": ["btc", "eth"],
+    "volatility": ["vix"],
     "commodities": ["gold", "oil_wti", "natgas"],
+    "rates": ["us10y"],
+    "crypto": ["btc", "eth", "sol"],
+    "europe": ["stoxx50", "dax", "ftse", "cac40"],
+    "asia": ["nikkei", "hangseng", "shanghai"],
+    "currencies": ["eurusd", "usdjpy", "usdcny", "gbpusd", "usdcad", "audusd"],
     "bonds": ["us10y", "us2y", "us30y"],
+    # Industry factors (GICS sectors)
+    "sectors": [
+        "tech", "financials", "healthcare", "energy", "consumer_disc",
+        "industrials", "materials", "utilities", "consumer_stpl", "real_estate", "communication"
+    ],
+    # Style factors
+    "styles": ["momentum", "value", "growth", "quality", "small_cap"],
+    # Convenience aggregates
+    "factors": ["vix", "gold", "oil_wti", "natgas", "us10y"],  # Core systematic factors
     "all": [
         "es_futures", "nq_futures", "ym_futures",
-        "gold", "btc", "vix",
-        "oil_wti", "natgas",
-        "us10y",
-        "sp500", "nasdaq", "dow",
-        "stoxx50", "dax", "ftse",
+        "vix", "gold", "oil_wti", "natgas", "us10y",
+        "sp500", "nasdaq", "dow", "russell2000",
+        "stoxx50", "dax", "ftse", "cac40",
         "nikkei", "hangseng", "shanghai",
+        "btc", "eth", "sol",
+        "eurusd", "usdjpy", "usdcny", "gbpusd", "usdcad", "audusd",
+        "tech", "financials", "healthcare", "energy", "consumer_disc",
+        "industrials", "materials", "utilities", "consumer_stpl", "real_estate", "communication",
+        "momentum", "value", "growth", "quality", "small_cap",
     ],
 }
 
@@ -58,9 +74,10 @@ MARKET_SYMBOLS = {
     "hangseng": "^HSI",
     "shanghai": "000001.SS",
 
-    # Crypto (via futures)
+    # Crypto
     "btc": "BTC-USD",
     "eth": "ETH-USD",
+    "sol": "SOL-USD",
 
     # Commodities
     "gold": "GC=F",
@@ -76,17 +93,61 @@ MARKET_SYMBOLS = {
 
     # Volatility
     "vix": "^VIX",
+
+    # Currencies
+    "eurusd": "EURUSD=X",
+    "usdjpy": "JPY=X",
+    "usdcny": "CNY=X",
+    "gbpusd": "GBPUSD=X",
+    "usdcad": "CAD=X",
+    "audusd": "AUDUSD=X",
+
+    # Sector ETFs (GICS Industries)
+    "tech": "XLK",          # Technology
+    "financials": "XLF",    # Financials
+    "energy": "XLE",        # Energy
+    "healthcare": "XLV",    # Healthcare
+    "consumer_disc": "XLY", # Consumer Discretionary
+    "consumer_stpl": "XLP", # Consumer Staples
+    "industrials": "XLI",   # Industrials
+    "utilities": "XLU",     # Utilities
+    "materials": "XLB",     # Materials
+    "real_estate": "XLRE",  # Real Estate
+    "communication": "XLC", # Communication Services
+
+    # Style Factor ETFs
+    "momentum": "MTUM",     # iShares MSCI USA Momentum
+    "value": "VTV",         # Vanguard Value
+    "growth": "VUG",        # Vanguard Growth
+    "quality": "QUAL",      # iShares MSCI USA Quality
+    "small_cap": "IWM",     # Russell 2000 (size factor)
 }
 
 # Formatting sections (for format_market_snapshot)
+# Organized by Paleologo factor framework
 FORMATTING_SECTIONS: dict[str, list[str]] = {
-    "BROAD MARKET FACTOR": ["es_futures", "nq_futures", "ym_futures"],
-    "RISK FACTORS": ["gold", "btc", "vix"],
-    "COMMODITY FACTORS": ["oil_wti", "natgas"],
-    "RATE FACTOR": ["us10y"],
-    "US INDICES": ["sp500", "nasdaq", "dow"],
-    "EUROPE": ["stoxx50", "dax", "ftse"],
+    "MARKET": ["sp500", "nasdaq", "dow", "russell2000"],  # During market hours
+    "MARKET FUTURES": ["es_futures", "nq_futures", "ym_futures"],  # After hours
+    "VOLATILITY": ["vix"],
+    "COMMODITIES": ["gold", "oil_wti", "natgas"],
+    "RATES": ["us10y"],
+    "SECTORS": [
+        "tech", "financials", "healthcare", "energy", "consumer_disc",
+        "industrials", "materials", "utilities", "consumer_stpl", "real_estate", "communication"
+    ],
+    "STYLE FACTORS": ["momentum", "value", "growth", "quality", "small_cap"],
+    "CRYPTO": ["btc", "eth", "sol"],
+    "EUROPE": ["stoxx50", "dax", "ftse", "cac40"],
     "ASIA": ["nikkei", "hangseng", "shanghai"],
+    "CURRENCIES": ["eurusd", "usdjpy", "usdcny", "gbpusd", "usdcad", "audusd"],
+}
+
+# Section to region mapping (for market status display)
+SECTION_REGION_MAP: dict[str, str] = {
+    "MARKET": "us",
+    "MARKET FUTURES": "us",
+    "EUROPE": "europe",
+    "ASIA": "asia",
 }
 
 # Friendly display names
@@ -95,9 +156,20 @@ DISPLAY_NAMES: dict[str, str] = {
     "gold": "Gold", "btc": "Bitcoin", "vix": "VIX",
     "oil_wti": "Oil WTI", "natgas": "Nat Gas",
     "us10y": "US 10Y",
-    "sp500": "S&P 500", "nasdaq": "Nasdaq", "dow": "Dow",
-    "stoxx50": "STOXX 50", "dax": "DAX", "ftse": "FTSE",
+    "sp500": "S&P 500", "nasdaq": "Nasdaq", "dow": "Dow", "russell2000": "Russell 2000",
+    "stoxx50": "STOXX 50", "dax": "DAX", "ftse": "FTSE", "cac40": "CAC 40",
     "nikkei": "Nikkei", "hangseng": "Hang Seng", "shanghai": "Shanghai",
+    "eth": "Ethereum", "sol": "Solana",
+    "eurusd": "EUR/USD", "usdjpy": "USD/JPY", "usdcny": "USD/CNY",
+    "gbpusd": "GBP/USD", "usdcad": "USD/CAD", "audusd": "AUD/USD",
+    # Sectors
+    "tech": "Technology", "financials": "Financials", "healthcare": "Healthcare",
+    "energy": "Energy", "consumer_disc": "Cons Discr", "industrials": "Industrials",
+    "materials": "Materials", "utilities": "Utilities", "consumer_stpl": "Cons Staples",
+    "real_estate": "Real Estate", "communication": "Communication",
+    # Style factors
+    "momentum": "Momentum", "value": "Value", "growth": "Growth",
+    "quality": "Quality", "small_cap": "Small Cap",
 }
 
 # Factor annotations
@@ -124,7 +196,93 @@ def is_market_open() -> bool:
     return market_open <= now_et < market_close
 
 
-def get_ticker_data(symbol: str) -> dict[str, Any]:
+def is_us_market_open() -> bool:
+    """Check if US market is currently open (9:30 AM - 4:00 PM ET, Mon-Fri)"""
+    return is_market_open()
+
+
+def is_europe_market_open() -> bool:
+    """Check if European markets are open (9:00 AM - 5:30 PM CET, Mon-Fri)"""
+    now_cet = datetime.now(ZoneInfo("Europe/Paris"))
+
+    # Check if weekend
+    if now_cet.weekday() >= WEEKEND_START_DAY:
+        return False
+
+    # Check if within market hours (9:00 AM - 5:30 PM CET)
+    market_open = now_cet.replace(hour=9, minute=0, second=0, microsecond=0)
+    market_close = now_cet.replace(hour=17, minute=30, second=0, microsecond=0)
+
+    return market_open <= now_cet < market_close
+
+
+def is_asia_market_open() -> bool:
+    """Check if Asian markets are open (9:00 AM - 3:00 PM JST for Tokyo, Mon-Fri)"""
+    now_jst = datetime.now(ZoneInfo("Asia/Tokyo"))
+
+    # Check if weekend
+    if now_jst.weekday() >= WEEKEND_START_DAY:
+        return False
+
+    # Check if within market hours (9:00 AM - 3:00 PM JST)
+    market_open = now_jst.replace(hour=9, minute=0, second=0, microsecond=0)
+    market_close = now_jst.replace(hour=15, minute=0, second=0, microsecond=0)
+
+    return market_open <= now_jst < market_close
+
+
+def get_market_status(region: str) -> str:
+    """Get market status for a region"""
+    status_map = {
+        "us": is_us_market_open,
+        "europe": is_europe_market_open,
+        "asia": is_asia_market_open,
+    }
+
+    if region.lower() in status_map:
+        is_open = status_map[region.lower()]()
+        return "Open" if is_open else "Closed"
+
+    return ""
+
+
+def calculate_momentum(symbol: str) -> dict[str, float | None]:
+    """Calculate trailing returns (1M, 1Y) for momentum analysis"""
+    try:
+        ticker = yf.Ticker(symbol)
+        # Fetch 1 year of history to calculate trailing returns
+        hist = ticker.history(period="1y", interval="1d")
+
+        min_history_len = 2
+        if hist.empty or len(hist) < min_history_len:
+            return {"momentum_1m": None, "momentum_1y": None}
+
+        current_price = hist["Close"].iloc[-1]
+
+        # 1-month momentum (~21 trading days)
+        days_1m = min(21, len(hist) - 1)
+        price_1m_ago = hist["Close"].iloc[-days_1m - 1]
+        momentum_1m = (
+            ((current_price - price_1m_ago) / price_1m_ago * 100)
+            if price_1m_ago else None
+        )
+
+        # 1-year momentum (first available price in history)
+        price_1y_ago = hist["Close"].iloc[0]
+        momentum_1y = (
+            ((current_price - price_1y_ago) / price_1y_ago * 100)
+            if price_1y_ago else None
+        )
+
+        return {
+            "momentum_1m": momentum_1m,
+            "momentum_1y": momentum_1y,
+        }
+    except Exception:
+        return {"momentum_1m": None, "momentum_1y": None}
+
+
+def get_ticker_data(symbol: str, include_momentum: bool = False) -> dict[str, Any]:
     """Fetch current data for a single ticker"""
     try:
         ticker = yf.Ticker(symbol)
@@ -133,58 +291,73 @@ def get_ticker_data(symbol: str) -> dict[str, Any]:
         price = info.get("regularMarketPrice") or info.get("currentPrice")
         change_pct = info.get("regularMarketChangePercent")
 
-        return {
+        result: dict[str, Any] = {
             "symbol": symbol,
             "price": price,
             "change_percent": change_pct,
         }
+
+        # Add momentum data if requested
+        if include_momentum:
+            momentum = calculate_momentum(symbol)
+            result.update(momentum)
+
+        return result
     except Exception as e:
         return {"symbol": symbol, "error": str(e)}
 
 
-def get_market_snapshot(categories: list[str]) -> dict[str, dict[str, Any]]:
+def get_market_snapshot(
+    categories: list[str],
+    show_momentum: bool = False
+) -> dict[str, dict[str, Any]]:
     """Get snapshot of multiple market categories"""
-    # Performance: Use dict for O(1) category lookup instead of if/elif chain
-    category_mapping: dict[str, list[str]] = {
-        "us": ["sp500", "nasdaq", "dow"],
-        "futures": ["es_futures", "nq_futures", "ym_futures"],
-        "factors": ["gold", "btc", "vix", "oil_wti", "natgas", "us10y"],
-        "europe": ["stoxx50", "dax", "ftse"],
-        "asia": ["nikkei", "hangseng", "shanghai"],
-        "crypto": ["btc", "eth"],
-        "commodities": ["gold", "oil_wti", "natgas"],
-        "bonds": ["us10y", "us2y", "us30y"],
-        "all": ["es_futures", "nq_futures", "ym_futures",
-                "gold", "btc", "vix",
-                "oil_wti", "natgas",
-                "us10y",
-                "sp500", "nasdaq", "dow",
-                "stoxx50", "dax", "ftse",
-                "nikkei", "hangseng", "shanghai"],
-    }
-
-    # Auto-detect: if no categories specified, show smart default (factor view)
+    # Auto-detect: if no categories specified, show comprehensive global view with factors
     if not categories:
-        categories = ["us", "factors"] if is_market_open() else ["futures", "factors"]
+        if is_market_open():
+            categories = ["us", "volatility", "commodities", "rates", "sectors", "styles",
+                         "crypto", "europe", "asia", "currencies"]
+        else:
+            categories = ["futures", "volatility", "commodities", "rates", "sectors", "styles",
+                         "crypto", "europe", "asia", "currencies"]
 
     # Build symbol list based on categories
     symbols_to_fetch: list[str] = []
     for cat in categories:
         category = cat.lower()
         # Performance: O(1) dict lookup instead of if/elif chain
-        if category in category_mapping:
-            symbols_to_fetch.extend(category_mapping[category])
+        if category in CATEGORY_MAPPING:
+            symbols_to_fetch.extend(CATEGORY_MAPPING[category])
         elif category in MARKET_SYMBOLS:
             # Check if it's a specific symbol key
             symbols_to_fetch.append(category)
 
-    # Fetch data for each symbol
-    # Performance: Dict comprehension with filter (single pass)
-    return {
-        key: get_ticker_data(symbol)
+    # Build list of (key, symbol) pairs to fetch
+    fetch_list = [
+        (key, symbol)
         for key in symbols_to_fetch
         if (symbol := MARKET_SYMBOLS.get(key)) is not None
-    }
+    ]
+
+    # Fetch data in parallel using ThreadPoolExecutor
+    # Performance: Parallel I/O (network requests) instead of sequential
+    results: dict[str, dict[str, Any]] = {}
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        # Submit all fetch tasks
+        future_to_key = {
+            executor.submit(get_ticker_data, symbol, show_momentum): key
+            for key, symbol in fetch_list
+        }
+
+        # Collect results as they complete
+        for future in as_completed(future_to_key):
+            key = future_to_key[future]
+            try:
+                results[key] = future.result()
+            except Exception as e:
+                results[key] = {"symbol": key, "error": str(e)}
+
+    return results
 
 
 def get_ticker_history(symbol: str, period: str = "1mo") -> dict[str, Any]:
@@ -207,24 +380,40 @@ def get_ticker_history(symbol: str, period: str = "1mo") -> dict[str, Any]:
         return {"error": str(e)}
 
 
-def format_market_snapshot(data: dict[str, dict[str, Any]]) -> str:
+def format_market_snapshot(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912
     """Format market data into concise readable text (BBG Lite style)"""
     now = datetime.now(ZoneInfo("America/New_York"))
     date_str = now.strftime("%Y-%m-%d")
-    time_str = now.strftime("%H:%M")
-    tz_str = now.strftime("%Z")
-    market_status = "During market" if is_market_open() else "After-hours"
+    time_str = now.strftime("%H:%M %Z")
 
-    # Header
-    lines = [f"MARKETS {date_str} | {market_status}"]
+    # Header with timestamp
+    lines = [f"MARKETS {date_str} {time_str}"]
+
+    # Determine which market section to show (MARKET vs MARKET FUTURES)
+    market_is_open = is_market_open()
 
     for section_name, symbols in FORMATTING_SECTIONS.items():
+        # Skip MARKET section if market closed (show MARKET FUTURES instead)
+        if section_name == "MARKET" and not market_is_open:
+            continue
+        # Skip MARKET FUTURES section if market open (show MARKET instead)
+        if section_name == "MARKET FUTURES" and market_is_open:
+            continue
+
         # Check if any symbols in this section are in our data
         section_data = {k: v for k, v in data.items() if k in symbols}
         if not section_data:
             continue
 
-        lines.append(section_name)
+        # Add market status to section header if applicable
+        region = SECTION_REGION_MAP.get(section_name)
+        if region:
+            status = get_market_status(region)
+            section_header = f"{section_name} ({status})"
+        else:
+            section_header = section_name
+
+        lines.append(section_header)
         for symbol, info in section_data.items():
             if info.get("error"):
                 display_name = DISPLAY_NAMES.get(symbol, symbol)
@@ -232,16 +421,27 @@ def format_market_snapshot(data: dict[str, dict[str, Any]]) -> str:
             else:
                 price = info.get("price")
                 change_pct = info.get("change_percent")
+                momentum_1m = info.get("momentum_1m")
+                momentum_1y = info.get("momentum_1y")
+
+                # Check if we have momentum data
+                has_momentum = momentum_1m is not None or momentum_1y is not None
 
                 if price is not None and change_pct is not None:
                     display_name = DISPLAY_NAMES.get(symbol, symbol)
-                    annotation = FACTOR_ANNOTATIONS.get(symbol, "")
-                    # Add annotation if present
-                    if annotation:
-                        line = f"{display_name:12} {price:10.2f}  {change_pct:+6.2f}%  {annotation}"
-                        lines.append(line)
-                    else:
-                        lines.append(f"{display_name:12} {price:10.2f}  {change_pct:+6.2f}%")
+                    line = f"{display_name:12} {price:10.2f}  {change_pct:+6.2f}%"
+
+                    # Add momentum columns if available
+                    if has_momentum:
+                        mom_1m_str = (
+                            f"{momentum_1m:+6.1f}%" if momentum_1m is not None else "   N/A"
+                        )
+                        mom_1y_str = (
+                            f"{momentum_1y:+6.1f}%" if momentum_1y is not None else "   N/A"
+                        )
+                        line += f"  {mom_1m_str} (1M)  {mom_1y_str} (1Y)"
+
+                    lines.append(line)
                 elif price is not None:
                     display_name = DISPLAY_NAMES.get(symbol, symbol)
                     lines.append(f"{display_name:12} {price:10.2f}")
@@ -251,7 +451,7 @@ def format_market_snapshot(data: dict[str, dict[str, Any]]) -> str:
         lines.append("")  # blank line between sections
 
     # Footer with guidance
-    lines.append(f"Data as of {date_str} {time_str} {tz_str} | Source: yfinance")
+    lines.append("Source: yfinance")
     lines.append(
         "Try: symbol='TSLA' for ticker | categories=['europe'] for regions | "
         "period='3mo' for history"

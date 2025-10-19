@@ -252,23 +252,149 @@ MCP output matches exactly - same format, same presentation, immediately useful.
 
 **Why this matters:** The AI doesn't have to write code to parse and format the output. It just reads it and uses it directly.
 
-### 3. Single Flexible Tool
+### 3. UI, Not API
 
-**One tool that adapts > many narrow tools.** Minimize context usage by consolidating functionality.
+**Tools should match UI screens, not API endpoints.** If we wanted the API, Claude could just `import yfinance`.
 
-`get_market_data` handles:
-- Market snapshots (auto-detects market hours)
-- Individual ticker queries
-- Historical price data
+**The insight from @meta/MCP_DEVELOPMENT.md:**
+> "Tools for the model should be one-to-one with your UI, not your API."
+> — Erik, Multi-Agent Research, Anthropic
 
-**Alternative (worse):** Separate tools for each use case
-- `get_futures`
-- `get_indices`
-- `get_crypto`
-- `get_ticker`
-- `get_history`
+**API thinking (wrong):**
+```python
+# One parameterized function that switches behavior
+get_market_data(data_type='snapshot', categories=['futures'])
+get_market_data(data_type='current', symbol='TSLA')
+get_market_data(data_type='history', symbol='TSLA', period='3mo')
+```
 
-This would consume 5x more context and be harder to use.
+**UI thinking (right):**
+```python
+# Each tool is a screen, like navigating Bloomberg Terminal
+markets()              # Market overview screen
+sector('technology')   # Sector drill-down screen
+ticker('TSLA')         # Individual ticker screen
+```
+
+**Navigation hierarchy:**
+```
+markets()              # "What's the market doing?"
+   ↓ drill down
+sector('technology')   # "How's this sector performing?"
+   ↓ drill down
+ticker('AAPL')        # "Tell me about this stock"
+```
+
+Each screen shows:
+- **Factors relevant to that context** - Beta, momentum, idio vol at appropriate level
+- **Navigation affordances** - Where you can go next ("Drill down: sector('technology')")
+- **Complete context** - Timestamp, source, market hours status
+
+**Why this matters:** Aligns with Paleologo workflow (systematic capital allocation):
+1. **markets()** → Understand systematic risk (what is beta doing?)
+2. **sector('xyz')** → Understand industry factor exposures
+3. **ticker('xyz')** → Understand individual security (beta, idio vol, momentum)
+4. Portfolio-level tools (separate) → Position sizing, risk decomposition, attribution
+
+**Not parameterized API calls** - Navigation hierarchy like a human would use.
+
+### Screen Design
+
+**Each tool = one screen = one question answered.**
+
+#### markets() - "What's the market doing?"
+
+Shows market overview with factors at market level:
+
+```
+MARKETS 2025-10-19 10:48 EDT | Market hours
+
+US EQUITIES
+S&P 500      6733.00   +0.27%   β 1.00   +1.2% (1M)   +24.8% (1Y)
+Nasdaq      25089.50   +0.66%   β 1.15   +2.1% (1M)   +28.4% (1Y)
+Dow         46568.00   +0.16%   β 0.92   +0.8% (1M)   +18.2% (1Y)
+
+SECTORS
+Technology       285.01   +0.18%   β 1.28   +3.4% (1M)   +24.2% (1Y)
+Financials       143.27   +0.67%   β 1.12   +4.7% (1M)    -4.8% (1Y)
+Healthcare       167.89   +0.23%   β 0.88   +2.1% (1M)   +12.3% (1Y)
+[all 11 GICS sectors]
+
+STYLES
+Momentum         252.80   -0.04%   β 1.05   -0.7% (1M)   +22.0% (1Y)
+Value            185.64   +0.50%   β 0.95   +0.4% (1M)    +6.7% (1Y)
+Growth           478.24   +0.45%   β 1.02   +0.6% (1M)   +22.5% (1Y)
+
+COMMODITIES
+Gold            2742.30   β 0.12   +5.2% (1M)   +15.8% (1Y)
+Oil (WTI)         71.24   β 0.25  -12.4% (1M)    -8.2% (1Y)
+
+VOLATILITY & RATES
+VIX               16.42   -15.2% (1M)   -22.3% (1Y)
+10Y Treasury      4.23%    +0.8% (1M)    +2.4% (1Y)
+
+Data as of 2025-10-19 10:48 EDT | Source: yfinance
+Drill down: sector('technology') | ticker('AAPL')
+```
+
+**Factors shown:** Beta (vs SPX), momentum (1M, 1Y) - always, no parameters
+
+#### sector('technology') - "How's this sector performing?"
+
+Shows sector-level factors and top constituents:
+
+```
+TECHNOLOGY SECTOR                         XLK 285.01 +0.18%
+
+SECTOR FACTORS
+Beta to SPX      1.28    (High sensitivity)
+Momentum 1M      +3.4%
+Momentum 1Y     +24.2%
+Idio Vol        14.2%
+
+TOP HOLDINGS
+AAPL    242.50   +2.43%   β 1.15   23.4% weight
+MSFT    415.20   +1.85%   β 1.22   21.2% weight
+NVDA    892.45   +3.12%   β 1.85   15.8% weight
+[top 10 holdings]
+
+Data as of 2025-10-19 10:48 EDT | Source: yfinance
+Back: markets() | Drill down: ticker('AAPL')
+```
+
+**Factors shown:** Sector beta, momentum, idio vol, constituent betas
+
+#### ticker('TSLA') - "Tell me about this stock"
+
+Shows individual security with complete factor exposures:
+
+```
+TSLA US EQUITY                   LAST PRICE  242.50 +5.75  +2.43%
+TESLA INC                        MKT CAP     770.5B    VOLUME 15.2M
+
+FACTOR EXPOSURES
+Beta (SPX)       2.08    (High sensitivity)
+Sector           Technology (XLK)
+Beta (XLK)       1.62    (vs sector)
+Idio Vol         32.4%   (High stock-specific risk)
+
+MOMENTUM
+1-Month          +8.4%
+1-Year          +48.2%
+RSI (14D)        72.3    (Overbought)
+
+52-WEEK RANGE
+High             299.29
+Low              138.80
+Current          242.50  [===════════░░░░░░░]  67% of range
+
+Data as of 2025-10-19 10:48 EDT | Source: yfinance
+Back: sector('technology') | Compare: ticker('F')
+```
+
+**Factors shown:** Beta (SPX and sector), idio vol, momentum, RSI, range
+
+**Key design principle:** Each screen shows factors relevant to that level. Market screen shows market-level betas. Ticker screen shows individual security factors. Navigation affordances show where you can go.
 
 ### 4. PMF Testing Methodology
 
