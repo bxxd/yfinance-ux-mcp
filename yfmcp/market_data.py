@@ -475,7 +475,7 @@ def get_markets_data() -> dict[str, dict[str, Any]]:
     return results
 
 
-def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0915
+def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912, PLR0915
     """Format markets() screen - BBG Lite style with factors"""
     now = datetime.now(ZoneInfo("America/New_York"))
     date_str = now.strftime("%Y-%m-%d")
@@ -647,10 +647,11 @@ def format_sector(data: dict[str, Any]) -> str:
     # Header
     price = sector_data.get("price", 0)
     change_pct = sector_data.get("change_percent", 0)
-    lines = [
-        f"{sector_name.upper()} SECTOR                         {sector_symbol} {price:.2f} {change_pct:+.2f}%",
-        ""
-    ]
+    header = (
+        f"{sector_name.upper()} SECTOR                         "
+        f"{sector_symbol} {price:.2f} {change_pct:+.2f}%"
+    )
+    lines = [header, ""]
 
     # Sector factors
     mom_1m = sector_data.get("momentum_1m")
@@ -676,7 +677,8 @@ def format_sector(data: dict[str, Any]) -> str:
 
     # Footer
     lines.append(f"Data as of {date_str} {time_str} | Source: yfinance")
-    lines.append(f"Back: markets() | Drill down: ticker('{holdings[0]['symbol'] if holdings else 'AAPL'}')")
+    drill_symbol = holdings[0]["symbol"] if holdings else "AAPL"
+    lines.append(f"Back: markets() | Drill down: ticker('{drill_symbol}')")
 
     return "\n".join(lines)
 

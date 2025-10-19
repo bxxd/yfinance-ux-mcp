@@ -4,7 +4,7 @@ yfinance MCP Server - MCP protocol wrapper
 
 UI-based screens (not API endpoints):
 - markets() - Market overview with all factors
-- sector(name) - Sector drill-down (TODO)
+- sector(name) - Sector drill-down
 - ticker(symbol) - Individual security (TODO)
 
 Core business logic in market_data.py (testable independently)
@@ -18,7 +18,12 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
-from .market_data import format_markets, get_markets_data
+from .market_data import (
+    format_markets,
+    format_sector,
+    get_markets_data,
+    get_sector_data,
+)
 
 app = Server("yfinance-mcp")
 
@@ -52,6 +57,42 @@ Navigation: Drill down with sector('technology') or ticker('AAPL')
                 "required": []
             }
         ),
+        Tool(
+            name="sector",
+            description="""
+Sector drill-down screen - detailed sector analysis.
+
+Shows:
+- Sector ETF price and momentum (1M, 1Y)
+- Top 10 holdings with symbol, name, and weight
+- Navigation back to markets() or drill to ticker()
+
+Input: Sector name (e.g., 'technology', 'real estate', 'financials')
+
+Accepts both display names and normalized names:
+- 'technology' or 'tech'
+- 'real estate' or 'real_estate'
+- 'consumer discretionary' or 'consumer_disc'
+- 'consumer staples' or 'consumer_stpl'
+
+Output: BBG Lite formatted text (dense, scannable, professional).
+""",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": (
+                            "Sector name (e.g., 'technology', 'financials', "
+                            "'healthcare', 'energy', 'consumer discretionary', "
+                            "'consumer staples', 'industrials', 'utilities', "
+                            "'materials', 'real estate', 'communication')"
+                        ),
+                    }
+                },
+                "required": ["name"]
+            }
+        ),
     ]
 
 
@@ -61,6 +102,15 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:  # noqa: AN
     if name == "markets":
         data = get_markets_data()
         formatted = format_markets(data)
+        return [TextContent(type="text", text=formatted)]
+
+    if name == "sector":
+        sector_name = arguments.get("name")
+        if not sector_name:
+            msg = "sector() requires 'name' parameter"
+            raise ValueError(msg)
+        data = get_sector_data(sector_name)
+        formatted = format_sector(data)
         return [TextContent(type="text", text=formatted)]
 
     msg = f"Unknown tool: {name}"
