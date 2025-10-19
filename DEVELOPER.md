@@ -396,6 +396,182 @@ Back: sector('technology') | Compare: ticker('F')
 
 **Key design principle:** Each screen shows factors relevant to that level. Market screen shows market-level betas. Ticker screen shows individual security factors. Navigation affordances show where you can go.
 
+### Implementation Plan: API → UI Redesign
+
+**Current state:** One parameterized tool `get_market_data(data_type, categories, symbol, period, show_momentum)`
+
+**Target state:** Three screen-based tools
+
+#### Tool 1: markets()
+
+**Purpose:** "What's the market doing?"
+
+**No parameters** - shows complete market overview with all factors
+
+**Data displayed:**
+- US EQUITIES: S&P 500, Nasdaq, Dow, Russell 2000 (with β, momentum 1M/1Y)
+- GLOBAL: Europe (STOXX 50), Asia (Nikkei), China (Shanghai)
+- SECTORS: All 11 GICS sectors (XLK, XLF, XLV, etc.) with β, momentum
+- STYLES: Momentum (MTUM), Value (VTV), Growth (VUG), Quality (QUAL), Size (IWM)
+- COMMODITIES: Gold, Oil, Natural Gas (with β, momentum)
+- VOLATILITY & RATES: VIX, 10Y Treasury (momentum only)
+
+**From yfinance:**
+```python
+# For each symbol
+price = ticker.info.get('regularMarketPrice') or ticker.info.get('currentPrice')
+change_pct = ticker.info.get('regularMarketChangePercent')
+beta = ticker.info.get('beta')
+# Calculate momentum from ticker.history(period='1y')
+```
+
+**Footer:** Navigation affordances ("Drill down: sector('technology') | ticker('AAPL')")
+
+#### Tool 2: sector(name)
+
+**Purpose:** "How's this sector performing?"
+
+**Parameters:**
+- `name` (required): Sector name - enum: ['technology', 'financials', 'healthcare', 'energy', 'consumer_disc', 'consumer_stpl', 'industrials', 'utilities', 'materials', 'real_estate', 'communication']
+
+**Data displayed:**
+- Sector ETF price/change (XLK for technology)
+- Sector factors: Beta to SPX, Momentum (1M, 1Y), Idio Vol
+- Top holdings: Top 10 constituents with price, change, beta, weight
+
+**From yfinance:**
+```python
+# Sector ETF
+sector_etf = yf.Ticker('XLK')
+beta = sector_etf.info.get('beta')
+# Calculate idio vol from history
+
+# Holdings
+holdings = sector_etf.info.get('holdings')  # Top holdings with weights
+# Fetch each holding's data
+```
+
+**Footer:** Navigation ("Back: markets() | Drill down: ticker('AAPL')")
+
+#### Tool 3: ticker(symbol)
+
+**Purpose:** "Tell me about this stock"
+
+**Parameters:**
+- `symbol` (required): Ticker symbol (e.g., 'TSLA', 'AAPL')
+
+**Data displayed:**
+
+**Header:**
+- Price, change, market cap, volume
+
+**Factor Exposures:**
+- Beta (SPX) - `ticker.info['beta']`
+- Beta (sector) - Calculate vs sector ETF
+- Idio Vol (ann) - Calculate from historical returns minus market/sector
+- Total Vol (ann) - Calculate from historical returns
+
+**Valuation:**
+- P/E Ratio - `ticker.info['trailingPE']`
+- Forward P/E - `ticker.info['forwardPE']`
+- Dividend Yield - `ticker.info['dividendYield']`
+
+**Momentum & Technicals:**
+- 1-Month, 1-Year, YTD - Calculate from `.history()`
+- 50-Day MA - `ticker.info['fiftyDayAverage']`
+- 200-Day MA - `ticker.info['twoHundredDayAverage']`
+- RSI (14D) - Calculate from `.history(period='1mo')`
+
+**52-Week Range:**
+- High - `ticker.info['fiftyTwoWeekHigh']`
+- Low - `ticker.info['fiftyTwoWeekLow']`
+- Visual bar showing current position in range
+
+**Footer:** Navigation ("Back: sector('technology') | Compare: ticker('F')")
+
+#### Implementation Steps
+
+1. **Update server.py** - Replace single tool with three:
+   - `markets` (no params)
+   - `sector` (name param with enum)
+   - `ticker` (symbol param)
+
+2. **Update market_data.py** - New functions:
+   - `get_markets_data()` - Fetch all market overview data
+   - `format_markets()` - BBG Lite formatting for market screen
+   - `get_sector_data(name)` - Fetch sector ETF + holdings
+   - `format_sector(data)` - BBG Lite formatting for sector screen
+   - `get_ticker_data(symbol)` - Fetch all ticker metrics
+   - `format_ticker(data)` - BBG Lite formatting for ticker screen
+   - `calculate_idio_vol(symbol)` - Idio volatility calculation
+   - `calculate_rsi(prices, period=14)` - RSI calculation
+
+3. **Update cli.py** - New commands:
+   - `./cli markets`
+   - `./cli sector technology`
+   - `./cli ticker TSLA`
+
+4. **Test with CLI** - Verify outputs match BBG Lite design before MCP integration
+
+5. **Update tests** - New test cases for each screen
+
+6. **Update README.md** - New usage examples
+
+#### Data Requirements
+
+**New calculations needed:**
+
+**Idiosyncratic volatility:**
+```python
+# 1-year daily returns
+ticker_returns = ticker.history(period='1y')['Close'].pct_change()
+market_returns = yf.Ticker('^GSPC').history(period='1y')['Close'].pct_change()
+
+# Regression to get beta and alpha
+beta, alpha = np.polyfit(market_returns, ticker_returns, 1)
+
+# Residuals = idiosyncratic component
+residuals = ticker_returns - (alpha + beta * market_returns)
+idio_vol = residuals.std() * np.sqrt(252)  # Annualized
+```
+
+**RSI (14-day):**
+```python
+def calculate_rsi(prices, period=14):
+    delta = prices.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi.iloc[-1]
+```
+
+**Momentum (1M, 1Y):**
+```python
+hist = ticker.history(period='1y')
+current = hist['Close'].iloc[-1]
+one_month_ago = hist['Close'].iloc[-21]  # ~21 trading days
+one_year_ago = hist['Close'].iloc[0]
+
+momentum_1m = ((current - one_month_ago) / one_month_ago) * 100
+momentum_1y = ((current - one_year_ago) / one_year_ago) * 100
+```
+
+#### Execution Strategy
+
+**No migration. No deprecation. Replace everything.**
+
+**Single Source of Truth:** One right way to do things. Delete old code, write new code, test, ship.
+
+1. Delete old `get_market_data` implementation from server.py
+2. Delete old market_data.py functions (or refactor into new screens)
+3. Implement new three-tool design
+4. Test with CLI
+5. Update README
+6. Done
+
+**This is a complete rewrite, not a migration.** The old API-style tool was wrong. The new UI-style tools are right. No backward compatibility needed - we're the only user.
+
 ### 4. PMF Testing Methodology
 
 **Build → Use → Iterate.** Test with real usage from day one.

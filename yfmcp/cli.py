@@ -1,147 +1,135 @@
 #!/usr/bin/env python3
 """
-CLI wrapper for yfinance MCP server - shows exactly what Claude sees
-
-Zero drift: Uses actual MCP server handlers for tool listing and execution.
+CLI for yfinance MCP - test screens without MCP restart
 
 Usage:
-  ./cli.py list-tools              # Show available tools (what Claude sees)
-  ./cli.py call [tool] [args]      # Call a tool (what Claude receives)
+  ./cli list-tools           # Show MCP tool definitions
+  ./cli markets              # Market overview screen
+  ./cli sector technology    # Sector drill-down screen
+  ./cli ticker TSLA          # Individual ticker screen
 
-Examples:
-  ./cli.py list-tools
-  ./cli.py call get_market_data
-  ./cli.py call get_market_data --data_type snapshot --categories futures,crypto
-  ./cli.py call get_market_data --data_type current --symbol TSLA
+Fast iteration: Calls market_data.py functions directly (no MCP layer)
 """
 
 import argparse
 import asyncio
 import json
 import sys
-import traceback
-from typing import Any
 
-from .server import call_tool, list_tools
+from .market_data import (
+    format_markets,
+    format_sector,
+    get_markets_data,
+    get_sector_data,
+)
+from .server import list_tools
 
 
-async def list_tools_command() -> None:
-    """Show available tools exactly as Claude sees them - no drift"""
-    # Call the actual MCP list_tools handler
+async def list_tools_command() -> int:
+    """Show MCP tool definitions"""
     tools = await list_tools()
 
     print("=" * 80)
-    print("AVAILABLE TOOLS (what Claude sees)")
+    print("MCP TOOL DEFINITIONS")
     print("=" * 80)
     print()
 
     for tool in tools:
-        print(f"Server name: {tool.name}")
-        print(f"Claude sees: mcp__idio_yf__{tool.name}")
+        print(f"Tool: {tool.name}")
+        print(f"Claude sees: mcp__idio-yf__{tool.name}")
         print()
-        print(f"Description:{tool.description}")
+        print("Description:")
+        print(tool.description)
         print()
         print("Input Schema:")
         print(json.dumps(tool.inputSchema, indent=2))
         print()
 
-
-async def call_tool_command(tool_name: str, args: dict[str, Any]) -> int:
-    """Call a tool and show output exactly as Claude receives it - no drift"""
-    print("=" * 80)
-    print(f"CALLING TOOL: {tool_name}")
-    print("=" * 80)
-    print()
-    print("Arguments:")
-    print(json.dumps(args, indent=2))
-    print()
-    print("-" * 80)
-    print("OUTPUT (what Claude receives):")
-    print("-" * 80)
-    print()
-
-    try:
-        # Call the actual MCP call_tool handler
-        results = await call_tool(tool_name, args)
-        for result in results:
-            if hasattr(result, "text"):
-                print(result.text)
-            else:
-                print(result)
-    except Exception as e:
-        print(f"ERROR: {e}")
-        traceback.print_exc()
-        return 1
-
     return 0
+
+
+def markets_command() -> int:
+    """Show markets() screen"""
+    data = get_markets_data()
+    output = format_markets(data)
+    print(output)
+    return 0
+
+
+def sector_command(name: str) -> int:
+    """Show sector() screen"""
+    data = get_sector_data(name)
+    output = format_sector(data)
+    print(output)
+    return 0
+
+
+def ticker_command(symbol: str) -> int:
+    """Show ticker() screen"""
+    print(f"ticker('{symbol}') - NOT IMPLEMENTED YET")
+    return 1
 
 
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(
-        description="CLI wrapper for yfinance MCP - see what Claude sees",
+        description="CLI for yfinance MCP screens",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   %(prog)s list-tools
-  %(prog)s call get_market_data
-  %(prog)s call get_market_data --data_type snapshot --categories futures,crypto
-  %(prog)s call get_market_data --data_type current --symbol TSLA
-  %(prog)s call get_market_data --data_type history --symbol AAPL --period 3mo
+  %(prog)s markets
+  %(prog)s sector technology
+  %(prog)s ticker TSLA
         """
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
     # list-tools command
-    subparsers.add_parser("list-tools", help="Show available tools")
+    subparsers.add_parser("list-tools", help="Show MCP tool definitions")
 
-    # call command
-    call_parser = subparsers.add_parser("call", help="Call a tool")
-    call_parser.add_argument("tool", help="Tool name to call")
-    call_parser.add_argument("--data_type", help="Data type: snapshot, current, history")
-    call_parser.add_argument(
-        "--categories", help="Comma-separated categories (e.g., futures,crypto)"
-    )
-    call_parser.add_argument("--symbol", help="Ticker symbol (e.g., TSLA, AAPL)")
-    call_parser.add_argument("--period", help="Period for history (e.g., 1mo, 3mo, 1y)")
-    call_parser.add_argument(
-        "--show_momentum",
-        action="store_true",
-        help="Show trailing returns (1M, 1Y) for momentum analysis"
-    )
+    # markets command
+    subparsers.add_parser("markets", help="Market overview screen")
+
+    # sector command
+    sector_parser = subparsers.add_parser("sector", help="Sector drill-down screen")
+    sector_parser.add_argument("name", help="Sector name (e.g., technology)")
+
+    # ticker command
+    ticker_parser = subparsers.add_parser("ticker", help="Individual ticker screen")
+    ticker_parser.add_argument("symbol", help="Ticker symbol (e.g., TSLA)")
 
     return parser.parse_args()
 
 
-async def main() -> int:
+async def async_main() -> int:
     args = parse_args()
 
     if not args.command:
         print("Error: No command specified")
-        print("Usage: ./cli.py list-tools | call <tool> [args]")
+        print("Usage: ./cli list-tools | markets | sector <name> | ticker <symbol>")
         return 1
 
     if args.command == "list-tools":
-        await list_tools_command()
-        return 0
+        return await list_tools_command()
 
-    # args.command == "call" (only remaining option per argparse subparsers)
-    # Build tool arguments
-    tool_args = {}
-    if args.data_type:
-        tool_args["data_type"] = args.data_type
-    if args.categories:
-        tool_args["categories"] = args.categories.split(",")
-    if args.symbol:
-        tool_args["symbol"] = args.symbol
-    if args.period:
-        tool_args["period"] = args.period
-    if args.show_momentum:
-        tool_args["show_momentum"] = True
+    if args.command == "markets":
+        return markets_command()
 
-    return await call_tool_command(args.tool, tool_args)
+    if args.command == "sector":
+        return sector_command(args.name)
+
+    if args.command == "ticker":
+        return ticker_command(args.symbol)
+
+    print(f"Unknown command: {args.command}")
+    return 1
+
+
+def main() -> int:
+    return asyncio.run(async_main())
 
 
 if __name__ == "__main__":
-    sys.exit(asyncio.run(main()))
+    sys.exit(main())

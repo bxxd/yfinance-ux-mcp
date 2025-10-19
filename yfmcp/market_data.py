@@ -121,6 +121,9 @@ MARKET_SYMBOLS = {
     "growth": "VUG",        # Vanguard Growth
     "quality": "QUAL",      # iShares MSCI USA Quality
     "small_cap": "IWM",     # Russell 2000 (size factor)
+
+    # Private Credit / BDCs
+    "private_credit": "BIZD",  # VanEck BDC Income ETF (private credit proxy)
 }
 
 # Formatting sections (for format_market_snapshot)
@@ -170,6 +173,8 @@ DISPLAY_NAMES: dict[str, str] = {
     # Style factors
     "momentum": "Momentum", "value": "Value", "growth": "Growth",
     "quality": "Quality", "small_cap": "Small Cap",
+    # Private credit
+    "private_credit": "Private Credit",
 }
 
 # Factor annotations
@@ -307,6 +312,31 @@ def get_ticker_data(symbol: str, include_momentum: bool = False) -> dict[str, An
         return {"symbol": symbol, "error": str(e)}
 
 
+def get_ticker_full_data(symbol: str) -> dict[str, Any]:
+    """Fetch comprehensive ticker data (price, beta, momentum) for markets() screen"""
+    try:
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+
+        price = info.get("regularMarketPrice") or info.get("currentPrice")
+        change_pct = info.get("regularMarketChangePercent")
+        beta = info.get("beta")
+
+        # Get momentum
+        momentum = calculate_momentum(symbol)
+
+        return {
+            "symbol": symbol,
+            "price": price,
+            "change_percent": change_pct,
+            "beta": beta,
+            "momentum_1m": momentum.get("momentum_1m"),
+            "momentum_1y": momentum.get("momentum_1y"),
+        }
+    except Exception as e:
+        return {"symbol": symbol, "error": str(e)}
+
+
 def get_market_snapshot(
     categories: list[str],
     show_momentum: bool = False
@@ -378,6 +408,277 @@ def get_ticker_history(symbol: str, period: str = "1mo") -> dict[str, Any]:
         }
     except Exception as e:
         return {"error": str(e)}
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# UI-BASED SCREENS (not API)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+def get_markets_data() -> dict[str, dict[str, Any]]:
+    """Fetch all market data for markets() screen - complete market overview"""
+    # Symbols to fetch - all market factors
+    symbols_to_fetch = [
+        # US Equities
+        ("sp500", "^GSPC"),
+        ("nasdaq", "^IXIC"),
+        ("dow", "^DJI"),
+        ("russell2000", "^RUT"),
+        # Global
+        ("stoxx50", "^STOXX50E"),
+        ("nikkei", "^N225"),
+        ("shanghai", "000001.SS"),
+        # Sectors (all 11 GICS)
+        ("tech", "XLK"),
+        ("financials", "XLF"),
+        ("healthcare", "XLV"),
+        ("energy", "XLE"),
+        ("consumer_disc", "XLY"),
+        ("consumer_stpl", "XLP"),
+        ("industrials", "XLI"),
+        ("utilities", "XLU"),
+        ("materials", "XLB"),
+        ("real_estate", "XLRE"),
+        ("communication", "XLC"),
+        # Styles
+        ("momentum", "MTUM"),
+        ("value", "VTV"),
+        ("growth", "VUG"),
+        ("quality", "QUAL"),
+        ("small_cap", "IWM"),
+        # Private Credit
+        ("private_credit", "BIZD"),
+        # Commodities
+        ("gold", "GC=F"),
+        ("oil_wti", "CL=F"),
+        ("natgas", "NG=F"),
+        # Volatility & Rates
+        ("vix", "^VIX"),
+        ("us10y", "^TNX"),
+    ]
+
+    # Fetch in parallel
+    results: dict[str, dict[str, Any]] = {}
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_key = {
+            executor.submit(get_ticker_full_data, symbol): key
+            for key, symbol in symbols_to_fetch
+        }
+
+        for future in as_completed(future_to_key):
+            key = future_to_key[future]
+            try:
+                results[key] = future.result()
+            except Exception as e:
+                results[key] = {"symbol": key, "error": str(e)}
+
+    return results
+
+
+def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0915
+    """Format markets() screen - BBG Lite style with factors"""
+    now = datetime.now(ZoneInfo("America/New_York"))
+    date_str = now.strftime("%Y-%m-%d")
+    time_str = now.strftime("%H:%M %Z")
+
+    # Header
+    market_status = "Market hours" if is_market_open() else "After hours"
+    lines = [f"MARKETS {date_str} {time_str} | {market_status}", ""]
+
+    # Helper to format line with ticker symbol
+    def format_line(key: str, show_ticker: bool = False) -> str | None:
+        info = data.get(key)
+        if not info or info.get("error"):
+            return None
+
+        price = info.get("price")
+        change_pct = info.get("change_percent")
+        mom_1m = info.get("momentum_1m")
+        mom_1y = info.get("momentum_1y")
+
+        if price is None or change_pct is None:
+            return None
+
+        name = DISPLAY_NAMES.get(key, key)
+
+        # Get ticker symbol for drill-down
+        ticker = MARKET_SYMBOLS.get(key, "")
+
+        # Format: NAME  TICKER  PRICE  CHANGE%  +X.X%  +XX.X%
+        if show_ticker:
+            line = f"{name:16} {ticker:8} {price:10.2f}   {change_pct:+6.2f}%"
+        else:
+            line = f"{name:16}          {price:10.2f}   {change_pct:+6.2f}%"
+
+        # Add momentum
+        if mom_1m is not None:
+            line += f"   {mom_1m:+6.1f}%"
+        else:
+            line += "          "
+
+        if mom_1y is not None:
+            line += f"   {mom_1y:+7.1f}%"
+
+        return line
+
+    # US EQUITIES
+    lines.append("US EQUITIES                   PRICE     CHANGE       1M         1Y")
+    for key in ["sp500", "nasdaq", "dow", "russell2000"]:
+        if line := format_line(key):
+            lines.append(line)
+    lines.append("")
+
+    # GLOBAL
+    lines.append("GLOBAL                        PRICE     CHANGE       1M         1Y")
+    for key in ["stoxx50", "nikkei", "shanghai"]:
+        if line := format_line(key):
+            lines.append(line)
+    lines.append("")
+
+    # SECTORS - show ticker for drill-down
+    lines.append("SECTORS          TICKER      PRICE     CHANGE       1M         1Y")
+    sector_keys = [
+        "tech", "financials", "healthcare", "energy", "consumer_disc",
+        "consumer_stpl", "industrials", "utilities", "materials",
+        "real_estate", "communication"
+    ]
+    for key in sector_keys:
+        if line := format_line(key, show_ticker=True):
+            lines.append(line)
+    lines.append("")
+
+    # STYLES - show ticker for drill-down
+    lines.append("STYLES           TICKER      PRICE     CHANGE       1M         1Y")
+    for key in ["momentum", "value", "growth", "quality", "small_cap"]:
+        if line := format_line(key, show_ticker=True):
+            lines.append(line)
+    lines.append("")
+
+    # PRIVATE CREDIT
+    lines.append("PRIVATE CREDIT   TICKER      PRICE     CHANGE       1M         1Y")
+    if line := format_line("private_credit", show_ticker=True):
+        lines.append(line)
+    lines.append("")
+
+    # COMMODITIES
+    lines.append("COMMODITIES                   PRICE     CHANGE       1M         1Y")
+    for key in ["gold", "oil_wti", "natgas"]:
+        if line := format_line(key):
+            lines.append(line)
+    lines.append("")
+
+    # VOLATILITY & RATES
+    lines.append("VOLATILITY & RATES            PRICE     CHANGE       1M         1Y")
+    for key in ["vix", "us10y"]:
+        if line := format_line(key):
+            lines.append(line)
+    lines.append("")
+
+    # Footer
+    lines.append(f"Data as of {date_str} {time_str} | Source: yfinance")
+    lines.append("Drill down: sector('technology') | ticker('AAPL')")
+
+    return "\n".join(lines)
+
+
+def get_sector_data(name: str) -> dict[str, Any]:
+    """Fetch sector data for sector() screen"""
+    # Normalize sector name: "real estate" -> "real_estate", "technology" -> "tech"
+    sector_key = name.lower().replace(" ", "_")
+
+    # Map display names to keys
+    name_to_key = {
+        "technology": "tech",
+        "consumer discretionary": "consumer_disc",
+        "consumer staples": "consumer_stpl",
+    }
+
+    # Try direct lookup first, then mapping
+    if sector_key in name_to_key:
+        sector_key = name_to_key[sector_key]
+
+    # Get sector ETF symbol
+    sector_symbol = MARKET_SYMBOLS.get(sector_key)
+    if not sector_symbol:
+        return {"error": f"Unknown sector: {name}"}
+
+    # Get sector ETF data
+    sector_data = get_ticker_full_data(sector_symbol)
+
+    # Get top holdings
+    try:
+        ticker = yf.Ticker(sector_symbol)
+        holdings_df = ticker.funds_data.top_holdings
+
+        # Convert to list of dicts with symbol, name, weight
+        holdings = []
+        for symbol_idx, row in holdings_df.head(10).iterrows():
+            holdings.append({
+                "symbol": symbol_idx,
+                "name": row["Name"],
+                "weight": row["Holding Percent"],
+            })
+    except Exception:
+        holdings = []
+
+    return {
+        "sector_key": sector_key,
+        "sector_name": DISPLAY_NAMES.get(sector_key, sector_key),
+        "sector_symbol": sector_symbol,
+        "sector_data": sector_data,
+        "holdings": holdings,
+    }
+
+
+def format_sector(data: dict[str, Any]) -> str:
+    """Format sector() screen - BBG Lite style"""
+    if data.get("error"):
+        return f"ERROR: {data['error']}"
+
+    sector_name = data["sector_name"]
+    sector_symbol = data["sector_symbol"]
+    sector_data = data["sector_data"]
+    holdings = data["holdings"]
+
+    now = datetime.now(ZoneInfo("America/New_York"))
+    date_str = now.strftime("%Y-%m-%d")
+    time_str = now.strftime("%H:%M %Z")
+
+    # Header
+    price = sector_data.get("price", 0)
+    change_pct = sector_data.get("change_percent", 0)
+    lines = [
+        f"{sector_name.upper()} SECTOR                         {sector_symbol} {price:.2f} {change_pct:+.2f}%",
+        ""
+    ]
+
+    # Sector factors
+    mom_1m = sector_data.get("momentum_1m")
+    mom_1y = sector_data.get("momentum_1y")
+
+    lines.append("SECTOR FACTORS")
+    if mom_1m is not None:
+        lines.append(f"Momentum 1M      {mom_1m:+6.1f}%")
+    if mom_1y is not None:
+        lines.append(f"Momentum 1Y      {mom_1y:+6.1f}%")
+    lines.append("")
+
+    # Top holdings
+    if holdings:
+        lines.append("TOP HOLDINGS     SYMBOL      WEIGHT")
+        for h in holdings:
+            symbol = h["symbol"]
+            weight_pct = h["weight"] * 100
+            # Truncate name to fit
+            name = h["name"][:20]
+            lines.append(f"{name:20} {symbol:8}    {weight_pct:5.1f}%")
+        lines.append("")
+
+    # Footer
+    lines.append(f"Data as of {date_str} {time_str} | Source: yfinance")
+    lines.append(f"Back: markets() | Drill down: ticker('{holdings[0]['symbol'] if holdings else 'AAPL'}')")
+
+    return "\n".join(lines)
 
 
 def format_market_snapshot(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912

@@ -1,26 +1,24 @@
 #!/usr/bin/env python3
 """
 yfinance MCP Server - MCP protocol wrapper
-Provides single flexible market data tool to minimize context usage
+
+UI-based screens (not API endpoints):
+- markets() - Market overview with all factors
+- sector(name) - Sector drill-down (TODO)
+- ticker(symbol) - Individual security (TODO)
 
 Core business logic in market_data.py (testable independently)
 This file handles MCP protocol layer only
 """
 
 import asyncio
-import json
 from typing import Any
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
-from .market_data import (
-    format_market_snapshot,
-    get_market_snapshot,
-    get_ticker_data,
-    get_ticker_history,
-)
+from .market_data import format_markets, get_markets_data
 
 app = Server("yfinance-mcp")
 
@@ -30,57 +28,27 @@ async def list_tools() -> list[Tool]:
     """List available MCP tools"""
     return [
         Tool(
-            name="get_market_data",
+            name="markets",
             description="""
-Yahoo Finance market data tool. Supports snapshots, current prices, and historical data.
+Market overview screen - complete factor landscape.
 
-Output organized by Paleologo factor framework: broad market, risk factors, commodities, rates.
+Shows:
+- US EQUITIES (S&P 500, Nasdaq, Dow, Russell 2000)
+- GLOBAL (Europe, Asia, China)
+- SECTORS (all 11 GICS sectors with momentum)
+- STYLES (Momentum, Value, Growth, Quality, Size)
+- COMMODITIES (Gold, Oil, Natural Gas)
+- VOLATILITY & RATES (VIX, 10Y Treasury)
 
-Examples:
-- Auto-detect: {} (shows factors + market indices)
-- Factor view: {"data_type": "snapshot", "categories": ["futures", "factors"]}
-- Current price: {"data_type": "current", "symbol": "AAPL"}
-- Historical: {"data_type": "history", "symbol": "TSLA", "period": "3mo"}
+All with momentum (1M, 1Y trailing returns).
 
-Use standard Yahoo tickers (e.g., AAPL, ^GSPC, BTC-USD). Output: Formatted text for easy scanning.
+Output: BBG Lite formatted text (dense, scannable, professional).
+
+Navigation: Drill down with sector('technology') or ticker('AAPL')
 """,
             inputSchema={
                 "type": "object",
-                "properties": {
-                    "data_type": {
-                        "type": "string",
-                        "enum": ["snapshot", "current", "history"],
-                        "description": "Data type",
-                        "default": "snapshot"
-                    },
-                    "categories": {
-                        "type": "array",
-                        "items": {
-                            "type": "string",
-                            "enum": [
-                                "us", "futures", "factors", "europe", "asia",
-                                "crypto", "commodities", "bonds", "volatility", "rates",
-                                "sectors", "styles", "currencies", "all"
-                            ]
-                        },
-                        "description": "Market categories (for snapshot only)"
-                    },
-                    "show_momentum": {
-                        "type": "boolean",
-                        "description": "Show trailing returns (1M, 1Y) for momentum analysis",
-                        "default": False
-                    },
-                    "symbol": {
-                        "type": "string",
-                        "description": "Ticker symbol (required for current/history)"
-                    },
-                    "period": {
-                        "type": "string",
-                        "enum": ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "max"],
-                        "description": "Time period (for history only)",
-                        "default": "1mo"
-                    }
-                },
+                "properties": {},
                 "required": []
             }
         ),
@@ -90,35 +58,13 @@ Use standard Yahoo tickers (e.g., AAPL, ^GSPC, BTC-USD). Output: Formatted text 
 @app.call_tool()  # type: ignore[misc]
 async def call_tool(name: str, arguments: Any) -> list[TextContent]:  # noqa: ANN401
     """Handle tool execution - thin wrapper around core business logic"""
-    if name != "get_market_data":
-        msg = f"Unknown tool: {name}"
-        raise ValueError(msg)
-
-    data_type = arguments.get("data_type", "snapshot")
-
-    if data_type == "snapshot":
-        categories = arguments.get("categories", [])
-        show_momentum = arguments.get("show_momentum", False)
-        data = get_market_snapshot(categories, show_momentum)
-        formatted = format_market_snapshot(data)
+    if name == "markets":
+        data = get_markets_data()
+        formatted = format_markets(data)
         return [TextContent(type="text", text=formatted)]
 
-    if data_type == "current":
-        symbol = arguments.get("symbol")
-        if not symbol:
-            return [TextContent(type="text", text="Error: symbol required for current data")]
-
-        data = get_ticker_data(symbol)
-        return [TextContent(type="text", text=json.dumps(data, indent=2))]
-
-    # data_type == "history" (only remaining option per inputSchema enum)
-    symbol = arguments.get("symbol")
-    period = arguments.get("period", "1mo")
-    if not symbol:
-        return [TextContent(type="text", text="Error: symbol required for historical data")]
-
-    data = get_ticker_history(symbol, period)
-    return [TextContent(type="text", text=json.dumps(data, indent=2))]
+    msg = f"Unknown tool: {name}"
+    raise ValueError(msg)
 
 
 async def main() -> None:
