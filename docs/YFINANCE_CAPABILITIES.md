@@ -12,6 +12,76 @@
 
 **Bottom line**: We have access to WAY more data than just prices - when ready to build stock-specific analysis tools (conviction scoring, fundamentals), the capabilities are already there.
 
+## ⚠️ Critical: Usage Constraints
+
+**yfinance is an UNOFFICIAL web scraper, not a sanctioned API.**
+
+### What This Means
+
+**yfinance mimics browser requests** to scrape Yahoo Finance. It's not an official API.
+
+**Implications:**
+- **No guarantees** - Can break at any time (Yahoo site changes)
+- **No documented rate limits** - Because it's not meant to be used this way
+- **Prone to blocking** - Yahoo's anti-scraping measures trigger on suspicious patterns
+- **Tightening restrictions** - Yahoo significantly tightened around early 2024
+- **No support** - When it breaks, you're on your own
+
+### What Triggers Blocks
+
+**Common causes of 429 errors and IP bans:**
+- Frequent requests from same IP address
+- Patterns resembling DDoS attacks (bulk downloads, continuous polling)
+- High-volume automated requests
+- Yahoo site changes can break library entirely
+
+### Safe Usage Pattern
+
+**✅ SAFE (our current implementation):**
+- **Ad-hoc, user-initiated queries** - Human asks → MCP call triggered
+- **One-off analysis** - "What's TSLA trading at?" → single call
+- **Manual research** - Checking markets, analyzing stocks, thesis work
+- **Occasional historical data** - Fetching charts for specific analysis
+- **Human-in-the-loop** - Every query has user interaction
+
+**This matches hobbyist/prototype/infrequent use that doesn't trigger blocks.**
+
+### Unsafe Usage Pattern
+
+**❌ NEVER DO THIS:**
+- **Cron jobs** - Scheduled market data updates
+- **Background processes** - Automated monitoring loops
+- **Continuous polling** - Real-time portfolio tracking
+- **Bulk downloads** - Scraping large datasets
+- **Production infrastructure** - Automated trading systems
+- **"Set it and forget it"** - Any automation without human interaction
+
+**These patterns trigger Yahoo's anti-scraping measures. 429 errors, IP bans, complete blocks.**
+
+### Appropriate Use Cases
+
+**yfinance is appropriate for:**
+- Research and thesis development
+- Ad-hoc position analysis
+- Manual market checks
+- One-off historical analysis
+- Prototyping and PMF testing
+
+**yfinance is NOT appropriate for:**
+- Real-time portfolio monitoring
+- Live P&L tracking
+- Automated alerts
+- Production trading infrastructure
+- Continuous data feeds
+
+**For automation or production use → migrate to official APIs** (Alpha Vantage, Polygon.io, IEX Cloud, etc.)
+
+### Bottom Line
+
+**This MCP server = research tool for occasional queries, not production infrastructure.**
+
+Perfect for PMF testing and ad-hoc analysis. Not suitable for automation or continuous monitoring. If yfinance breaks or gets blocked, that's the signal to migrate to official APIs.
+
 ## Asset Type Support Matrix
 
 | Method | Stocks | Indices | Crypto | Futures | Notes |

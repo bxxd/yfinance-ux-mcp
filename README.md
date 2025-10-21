@@ -14,6 +14,45 @@ Provides fast access to market snapshots, price data, and historical analysis.
 - **Historical data** - Fetch price history for analysis
 - **Human-readable output** - Formatted for immediate use, not raw JSON
 
+## Important: Usage Limitations
+
+**This tool is designed for ad-hoc, user-initiated requests only. Not for automation.**
+
+### What yfinance Is
+
+**yfinance is an unofficial web scraper**, not a sanctioned Yahoo Finance API. It mimics browser requests to fetch financial data.
+
+**Implications:**
+- **Can break at any time** - Yahoo site changes can break the library entirely
+- **No official rate limits** - Because it's not an official API
+- **Prone to blocking** - Automated polling or high-volume requests trigger Yahoo's anti-scraping measures (429 errors, IP bans)
+- **No guarantees** - Yahoo tightened restrictions significantly around early 2024
+
+### Safe Usage (What This Tool Does)
+
+**✅ Appropriate use cases:**
+- Ad-hoc market checks when you ask Claude
+- One-off stock analysis
+- Manual research and thesis development
+- Occasional historical data queries
+
+All queries are **user-initiated** through Claude Code. Every call has a human in the loop.
+
+### Unsafe Usage (Don't Do This)
+
+**❌ Never use this for:**
+- Cron jobs or scheduled updates
+- Automated monitoring loops
+- Background processes polling for data
+- Production infrastructure
+- Real-time portfolio tracking
+
+**If you need automation or production-grade data, use official APIs instead** (Alpha Vantage, Polygon.io, IEX Cloud, etc.)
+
+### Bottom Line
+
+This MCP server is a **research tool for occasional queries**, not production infrastructure. Perfect for PMF testing and ad-hoc analysis. Not suitable for automation or continuous monitoring.
+
 ## Installation
 
 ### 1. Clone and install dependencies

@@ -24,9 +24,9 @@ Custom Model Context Protocol server for Yahoo Finance data - built for idio pro
 
 **Every piece of data and logic should live in exactly ONE place.**
 
-- Market symbols → `MARKET_SYMBOLS` dict in `market_data.py`
+- Market symbols → `MARKET_SYMBOLS` and `SECTOR_ETFS` dicts in `market_data.py`
 - Market hours logic → `is_market_open()` function
-- Formatting logic → `format_market_snapshot()` function
+- Formatting logic → `format_markets()`, `format_sector()`, `format_ticker()` functions
 - MCP protocol → `server.py` only
 
 **No duplication.** If you need the same data or logic elsewhere, import it. Don't copy it.
@@ -396,11 +396,14 @@ Back: sector('technology') | Compare: ticker('F')
 
 **Key design principle:** Each screen shows factors relevant to that level. Market screen shows market-level betas. Ticker screen shows individual security factors. Navigation affordances show where you can go.
 
-### Implementation Plan: API → UI Redesign
+### Current Implementation: UI-Based Screens
 
-**Current state:** One parameterized tool `get_market_data(data_type, categories, symbol, period, show_momentum)`
+**Implementation Status:**
+- ✅ **markets()** - Complete and deployed
+- ✅ **sector(name)** - Complete and deployed
+- ❌ **ticker(symbol)** - TODO (get_ticker_data exists, needs format_ticker and MCP wiring)
 
-**Target state:** Three screen-based tools
+**Redesign completed Oct 2025** - Migrated from parameterized API-style `get_market_data()` to Bloomberg-Terminal-style navigation screens.
 
 #### Tool 1: markets()
 
@@ -489,33 +492,38 @@ holdings = sector_etf.info.get('holdings')  # Top holdings with weights
 
 **Footer:** Navigation ("Back: sector('technology') | Compare: ticker('F')")
 
-#### Implementation Steps
+#### Implementation Status
 
-1. **Update server.py** - Replace single tool with three:
-   - `markets` (no params)
-   - `sector` (name param with enum)
-   - `ticker` (symbol param)
+**✅ Completed:**
 
-2. **Update market_data.py** - New functions:
-   - `get_markets_data()` - Fetch all market overview data
-   - `format_markets()` - BBG Lite formatting for market screen
-   - `get_sector_data(name)` - Fetch sector ETF + holdings
-   - `format_sector(data)` - BBG Lite formatting for sector screen
-   - `get_ticker_data(symbol)` - Fetch all ticker metrics
-   - `format_ticker(data)` - BBG Lite formatting for ticker screen
-   - `calculate_idio_vol(symbol)` - Idio volatility calculation
-   - `calculate_rsi(prices, period=14)` - RSI calculation
+1. **server.py** - Two of three tools implemented:
+   - ✅ `markets` (no params)
+   - ✅ `sector` (name param)
+   - ❌ `ticker` (symbol param) - TODO
 
-3. **Update cli.py** - New commands:
-   - `./cli markets`
-   - `./cli sector technology`
-   - `./cli ticker TSLA`
+2. **market_data.py** - Core functions:
+   - ✅ `get_markets_data()` - Fetch all market overview data
+   - ✅ `format_markets()` - BBG Lite formatting for market screen
+   - ✅ `get_sector_data(name)` - Fetch sector ETF + holdings
+   - ✅ `format_sector(data)` - BBG Lite formatting for sector screen
+   - ✅ `get_ticker_data(symbol)` - Fetch ticker metrics (basic version exists)
+   - ❌ `format_ticker(data)` - TODO: BBG Lite formatting for ticker screen
+   - ❌ `calculate_idio_vol(symbol)` - TODO: Idio volatility calculation
+   - ❌ `calculate_rsi(prices, period=14)` - TODO: RSI calculation
 
-4. **Test with CLI** - Verify outputs match BBG Lite design before MCP integration
+3. **cli.py** - Commands:
+   - ✅ `./cli markets`
+   - ✅ `./cli sector technology`
+   - ✅ `./cli ticker TSLA` (basic version, uses get_ticker_data directly)
 
-5. **Update tests** - New test cases for each screen
+**❌ Remaining Work for ticker() screen:**
 
-6. **Update README.md** - New usage examples
+1. Implement `format_ticker(data)` in market_data.py with BBG Lite formatting
+2. Implement `calculate_idio_vol(symbol)` helper
+3. Implement `calculate_rsi(prices, period=14)` helper
+4. Wire ticker() to server.py's list_tools() and call_tool()
+5. Update tests for ticker screen
+6. Update README.md with ticker() examples
 
 #### Data Requirements
 
@@ -557,20 +565,13 @@ momentum_1m = ((current - one_month_ago) / one_month_ago) * 100
 momentum_1y = ((current - one_year_ago) / one_year_ago) * 100
 ```
 
-#### Execution Strategy
+#### Migration Notes (Oct 2025)
 
-**No migration. No deprecation. Replace everything.**
+**Redesign executed:** Old parameterized `get_market_data()` API-style tool replaced with three Bloomberg-Terminal-style screen tools.
 
-**Single Source of Truth:** One right way to do things. Delete old code, write new code, test, ship.
+**Philosophy:** No migration, no deprecation. Single source of truth - one right way to do things. We're the only user, so no backward compatibility needed.
 
-1. Delete old `get_market_data` implementation from server.py
-2. Delete old market_data.py functions (or refactor into new screens)
-3. Implement new three-tool design
-4. Test with CLI
-5. Update README
-6. Done
-
-**This is a complete rewrite, not a migration.** The old API-style tool was wrong. The new UI-style tools are right. No backward compatibility needed - we're the only user.
+**Result:** markets() and sector() fully functional. ticker() remains to be completed.
 
 ### 4. PMF Testing Methodology
 
@@ -592,6 +593,76 @@ The actual development process:
 **Key insight:** Steps 5-9 could have been skipped by just wrapping the manual code in MCP from the start.
 
 Don't build features speculatively. Build what's needed now, based on real usage.
+
+## Usage Constraints & Rate Limiting
+
+**CRITICAL: yfinance is an unofficial web scraper, not a sanctioned API.**
+
+### What yfinance Actually Is
+
+- **Unofficial scraper** - Mimics browser requests to Yahoo Finance
+- **No official API** - No documentation, no guarantees, no support
+- **No rate limits published** - Because it's not meant to be used this way
+- **Prone to blocks** - Yahoo's anti-scraping measures can trigger on suspicious patterns
+
+### What Triggers Blocks
+
+**Common causes of 429 errors and IP bans:**
+- Frequent requests from same IP
+- Patterns resembling DDoS (bulk downloads, continuous polling)
+- High-volume requests
+- Yahoo site changes (can break library entirely)
+
+**Historical context:** Yahoo tightened restrictions significantly around early 2024. The library breaks periodically when Yahoo changes their site.
+
+### Safe Usage Pattern (What We Do)
+
+**✅ SAFE - Our current implementation:**
+- **User-initiated queries only** - Human asks Claude → MCP call triggered
+- **One-off analysis** - "What's TSLA trading at?" → single call
+- **Manual market snapshots** - When user wants to check markets
+- **Ad-hoc research** - Historical data for specific thesis work
+- **No background processes** - All queries go through Claude Code
+- **No scheduled tasks** - No cron jobs, no automation
+
+**Why this is safe:** Every call has a human in the loop. No automated polling. Matches hobbyist/prototype/infrequent use case that doesn't trigger blocks.
+
+### Unsafe Usage Pattern (What NOT to Do)
+
+**❌ NEVER DO THIS:**
+- Cron jobs hitting yfinance every N minutes
+- Background processes refreshing market data automatically
+- Automated monitoring loops
+- Scheduled portfolio updates
+- Any "set it and forget it" automation
+- Continuous polling or bulk downloads
+
+**Why this is unsafe:** Patterns resembling automated scraping trigger Yahoo's anti-DDoS measures. 429 errors, IP bans, complete blocks.
+
+### Implications for Capital Allocation System
+
+**yfinance is appropriate for:**
+- Research and thesis development
+- Ad-hoc position analysis
+- One-off market checks
+- Manual portfolio reviews
+
+**yfinance is NOT appropriate for:**
+- Real-time portfolio monitoring
+- Live P&L tracking
+- Automated alerts
+- Continuous position monitoring
+- Production infrastructure
+
+**Future scaling:** If we need automated monitoring or real-time data, we'll migrate to an official API (Alpha Vantage, Polygon.io, IEX Cloud, etc.). yfinance is for PMF testing and research only.
+
+### Bottom Line
+
+**This MCP server is a research tool, not production infrastructure.**
+
+All queries are human-initiated through Claude Code. No automation. No polling. This keeps us well within safe usage patterns and avoids triggering Yahoo's anti-scraping measures.
+
+If yfinance breaks (Yahoo changes site) or gets blocked (unlikely with our usage pattern), we'll know it's time to migrate to official APIs.
 
 ## Development Process
 
@@ -767,31 +838,52 @@ Raw data:
 
 ### Core Functions (yfmcp/market_data.py)
 
+**Screen-based functions (UI navigation model):**
+
+**`get_markets_data()`** - Fetch complete market overview data
+- US equities, global indices, sectors, styles, commodities, volatility/rates
+- Returns dict of all ticker data with momentum calculations
+
+**`format_markets(data)`** - BBG Lite formatting for market screen
+- Dense, scannable professional output
+- Navigation affordances for drill-down
+
+**`get_sector_data(name)`** - Fetch sector ETF + top holdings
+- Sector ETF price, momentum (1M, 1Y)
+- Top 10 holdings with weights
+- Returns structured dict
+
+**`format_sector(data)`** - BBG Lite formatting for sector screen
+- Sector overview + constituent breakdown
+- Navigation affordances
+
+**`get_ticker_data(symbol)`** - Fetch individual ticker metrics
+- Basic version exists (price, change_percent)
+- TODO: Expand for full ticker screen (valuation, momentum, technicals)
+
+**`format_ticker(data)`** - TODO: BBG Lite formatting for ticker screen
+
+**Helper functions:**
+
 **`is_market_open()`** - Detects US market hours (9:30 AM - 4:00 PM ET, Mon-Fri)
 
-**`get_ticker_data(symbol)`** - Fetches price and change_percent for single ticker
-- Uses yfinance directly
-- No calculations, just passes through API data
-- Minimal fields (symbol, price, change_percent)
+**`calculate_momentum()`** - Calculate 1M, 1Y trailing returns from history
 
-**`get_market_snapshot(categories)`** - Fetches multiple tickers by category
-- Auto-detects market hours if no categories specified
-- Returns dict of ticker data
+**`calculate_idio_vol()`** - TODO: Idiosyncratic volatility calculation
 
-**`format_market_snapshot(data)`** - Formats ticker data for human reading
-- Matches manual script format exactly
-- Sections by category (US FUTURES, CRYPTO, etc.)
-- Friendly names (S&P 500 instead of es_futures)
-- Proper formatting ($, %, alignment)
+**`calculate_rsi()`** - TODO: RSI (14-day) calculation
 
 ### MCP Integration (yfmcp/server.py)
 
-**`list_tools()`** - Defines single tool: `get_market_data`
+**`list_tools()`** - Defines screen-based tools:
+- `markets` - Market overview (no params)
+- `sector` - Sector drill-down (name param)
+- `ticker` - Individual security (symbol param) - TODO
 
-**`call_tool()`** - Handles three data_types:
-- `snapshot` - Market overview (auto-detects or custom categories)
-- `current` - Single ticker current price
-- `history` - Historical price data
+**`call_tool()`** - Routes to appropriate screen handler:
+- `markets` → `get_markets_data()` + `format_markets()`
+- `sector` → `get_sector_data(name)` + `format_sector()`
+- `ticker` → TODO
 
 **Thin wrapper** - Imports from `market_data.py`, handles MCP protocol only
 
@@ -802,10 +894,10 @@ Raw data:
 ```bash
 cd /path/to/yfinance-mcp
 poetry run python -c "
-from yfmcp.market_data import get_market_snapshot, format_market_snapshot
+from yfmcp.market_data import get_markets_data, format_markets
 
-data = get_market_snapshot(['futures', 'crypto', 'commodities'])
-print(format_market_snapshot(data))
+data = get_markets_data()
+print(format_markets(data))
 "
 ```
 
@@ -821,10 +913,10 @@ Test the MCP server locally without Claude Code using the CLI tool:
 # List available tools (what Claude sees)
 ./cli list-tools
 
-# Call a tool (what Claude receives)
-./cli call get_market_data --data_type snapshot --categories futures,crypto
-./cli call get_market_data --data_type current --symbol AAPL
-./cli call get_market_data --data_type history --symbol TSLA --period 3mo
+# Call the screen-based tools (what Claude receives)
+./cli markets
+./cli sector technology
+./cli ticker TSLA  # TODO: Not yet wired to MCP server
 ```
 
 **Zero drift:** CLI uses the actual MCP server handlers, so output matches exactly what Claude receives.
@@ -847,10 +939,14 @@ Tests verify:
 
 After Claude Code restart:
 ```python
-mcp__yfinance__get_market_data(
-    data_type='snapshot',
-    categories=['futures', 'crypto', 'commodities']
-)
+# Market overview
+mcp__idio-yf__markets()
+
+# Sector drill-down
+mcp__idio-yf__sector(name='technology')
+
+# Individual ticker (TODO - not yet implemented)
+# mcp__idio-yf__ticker(symbol='TSLA')
 ```
 
 Output should match manual test exactly.

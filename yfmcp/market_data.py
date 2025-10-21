@@ -8,10 +8,20 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import numpy as np
 import yfinance as yf  # type: ignore[import-untyped]
 
 # Constants
 WEEKEND_START_DAY = 5  # Saturday (Monday = 0, Sunday = 6)
+
+# Factor thresholds
+RSI_PERIOD = 14
+RSI_OVERBOUGHT = 70
+RSI_OVERSOLD = 30
+BETA_HIGH_THRESHOLD = 1.2
+BETA_LOW_THRESHOLD = 0.8
+IDIO_VOL_HIGH_THRESHOLD = 30
+IDIO_VOL_LOW_THRESHOLD = 15
 
 # Category to symbol mappings (for get_market_snapshot)
 # Aligned with Paleologo factor framework
@@ -285,6 +295,79 @@ def calculate_momentum(symbol: str) -> dict[str, float | None]:
         }
     except Exception:
         return {"momentum_1m": None, "momentum_1y": None}
+
+
+def calculate_rsi(prices: Any, period: int = RSI_PERIOD) -> float | None:  # noqa: ANN401
+    """Calculate RSI (Relative Strength Index) for a price series"""
+    try:
+        # Calculate price changes
+        delta = prices.diff()
+
+        # Separate gains and losses
+        gain = delta.where(delta > 0, 0)
+        loss = -delta.where(delta < 0, 0)
+
+        # Calculate average gains and losses
+        avg_gain = gain.rolling(window=period).mean()
+        avg_loss = loss.rolling(window=period).mean()
+
+        # Calculate RS and RSI
+        rs = avg_gain / avg_loss
+        rsi = 100 - (100 / (1 + rs))
+
+        # Return most recent RSI value
+        return float(rsi.iloc[-1]) if not np.isnan(rsi.iloc[-1]) else None
+    except Exception:
+        return None
+
+
+def calculate_idio_vol(symbol: str) -> dict[str, float | None]:
+    """Calculate idiosyncratic volatility (stock-specific risk after removing market exposure)"""
+    try:
+        # Fetch 1 year of daily returns for ticker and market
+        ticker = yf.Ticker(symbol)
+        market = yf.Ticker("^GSPC")  # S&P 500 as market proxy
+
+        hist_ticker = ticker.history(period="1y", interval="1d")
+        hist_market = market.history(period="1y", interval="1d")
+
+        min_history_len = 30
+        if hist_ticker.empty or hist_market.empty:
+            return {"idio_vol": None, "total_vol": None}
+
+        if len(hist_ticker) < min_history_len or len(hist_market) < min_history_len:
+            return {"idio_vol": None, "total_vol": None}
+
+        # Calculate daily returns
+        ticker_returns = hist_ticker["Close"].pct_change().dropna()
+        market_returns = hist_market["Close"].pct_change().dropna()
+
+        # Align dates (intersection)
+        common_dates = ticker_returns.index.intersection(market_returns.index)
+        ticker_returns = ticker_returns.loc[common_dates]
+        market_returns = market_returns.loc[common_dates]
+
+        if len(ticker_returns) < min_history_len:
+            return {"idio_vol": None, "total_vol": None}
+
+        # Total volatility (annualized)
+        total_vol = float(ticker_returns.std() * np.sqrt(252) * 100)  # Convert to percentage
+
+        # Linear regression: decompose returns into market (beta) and stock-specific (alpha)
+        beta, alpha = np.polyfit(market_returns, ticker_returns, 1)
+
+        # Residuals = idiosyncratic component (stock-specific risk)
+        residuals = ticker_returns - (alpha + beta * market_returns)
+
+        # Idiosyncratic volatility (annualized)
+        idio_vol = float(residuals.std() * np.sqrt(252) * 100)  # Convert to percentage
+
+        return {
+            "idio_vol": idio_vol,
+            "total_vol": total_vol,
+        }
+    except Exception:
+        return {"idio_vol": None, "total_vol": None}
 
 
 def get_ticker_data(symbol: str, include_momentum: bool = False) -> dict[str, Any]:
@@ -679,6 +762,309 @@ def format_sector(data: dict[str, Any]) -> str:
     lines.append(f"Data as of {date_str} {time_str} | Source: yfinance")
     drill_symbol = holdings[0]["symbol"] if holdings else "AAPL"
     lines.append(f"Back: markets() | Drill down: ticker('{drill_symbol}')")
+
+    return "\n".join(lines)
+
+
+def get_ticker_screen_data(symbol: str) -> dict[str, Any]:
+    """Fetch comprehensive ticker data for ticker() screen"""
+    try:
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+
+        # Basic price data
+        price = info.get("regularMarketPrice") or info.get("currentPrice")
+        change = info.get("regularMarketChange")
+        change_pct = info.get("regularMarketChangePercent")
+        market_cap = info.get("marketCap")
+        volume = info.get("volume")
+        name = info.get("longName") or info.get("shortName") or symbol
+
+        # Factor exposures
+        beta_spx = info.get("beta")
+
+        # Valuation
+        trailing_pe = info.get("trailingPE")
+        forward_pe = info.get("forwardPE")
+        dividend_yield = info.get("dividendYield")
+
+        # Technicals
+        fifty_day_avg = info.get("fiftyDayAverage")
+        two_hundred_day_avg = info.get("twoHundredDayAverage")
+        fifty_two_week_high = info.get("fiftyTwoWeekHigh")
+        fifty_two_week_low = info.get("fiftyTwoWeekLow")
+
+        # Get momentum
+        momentum = calculate_momentum(symbol)
+
+        # Get idio vol
+        vol_data = calculate_idio_vol(symbol)
+
+        # Calculate RSI
+        rsi = None
+        try:
+            hist = ticker.history(period="1mo", interval="1d")
+            if not hist.empty and len(hist) >= RSI_PERIOD:
+                rsi = calculate_rsi(hist["Close"])
+        except Exception:
+            pass
+
+        # Get calendar data (earnings and dividend dates)
+        calendar = None
+        try:  # noqa: SIM105
+            calendar = ticker.calendar
+        except Exception:
+            pass  # Calendar not available for non-stocks (indices, ETFs, etc.)
+
+        return {
+            "symbol": symbol,
+            "name": name,
+            "price": price,
+            "change": change,
+            "change_percent": change_pct,
+            "market_cap": market_cap,
+            "volume": volume,
+            "beta_spx": beta_spx,
+            "trailing_pe": trailing_pe,
+            "forward_pe": forward_pe,
+            "dividend_yield": dividend_yield,
+            "fifty_day_avg": fifty_day_avg,
+            "two_hundred_day_avg": two_hundred_day_avg,
+            "fifty_two_week_high": fifty_two_week_high,
+            "fifty_two_week_low": fifty_two_week_low,
+            "momentum_1m": momentum.get("momentum_1m"),
+            "momentum_1y": momentum.get("momentum_1y"),
+            "idio_vol": vol_data.get("idio_vol"),
+            "total_vol": vol_data.get("total_vol"),
+            "rsi": rsi,
+            "calendar": calendar,
+        }
+    except Exception as e:
+        return {"symbol": symbol, "error": str(e)}
+
+
+def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
+    """Format ticker() screen - BBG Lite style with complete factor exposures"""
+    if data.get("error"):
+        return f"ERROR: {data['error']}"
+
+    symbol = data["symbol"]
+    name = data.get("name", symbol)
+    price = data.get("price")
+    change = data.get("change")
+    change_pct = data.get("change_percent")
+    market_cap = data.get("market_cap")
+    volume = data.get("volume")
+
+    now = datetime.now(ZoneInfo("America/New_York"))
+    date_str = now.strftime("%Y-%m-%d")
+    time_str = now.strftime("%H:%M %Z")
+
+    lines = []
+
+    # Header
+    if price is not None and change is not None and change_pct is not None:
+        header = (
+            f"{symbol} US EQUITY                   "
+            f"LAST PRICE  {price:.2f} {change:+.2f}  {change_pct:+.2f}%"
+        )
+    else:
+        header = f"{symbol} US EQUITY"
+    lines.append(header)
+
+    # Company name + Market cap/Volume
+    if market_cap is not None and volume is not None:
+        # Format market cap (billions)
+        market_cap_b = market_cap / 1e9
+        volume_m = volume / 1e6
+        lines.append(f"{name[:40]:40} MKT CAP  {market_cap_b:6.1f}B    VOLUME {volume_m:5.1f}M")
+    else:
+        lines.append(name[:60])
+    lines.append("")
+
+    # Factor Exposures
+    lines.append("FACTOR EXPOSURES")
+    beta_spx = data.get("beta_spx")
+    if beta_spx is not None:
+        sensitivity = ""
+        if beta_spx > BETA_HIGH_THRESHOLD:
+            sensitivity = "(High sensitivity)"
+        elif beta_spx < BETA_LOW_THRESHOLD:
+            sensitivity = "(Low sensitivity)"
+        lines.append(f"Beta (SPX)       {beta_spx:4.2f}    {sensitivity}")
+
+    idio_vol = data.get("idio_vol")
+    total_vol = data.get("total_vol")
+    if idio_vol is not None:
+        risk_level = ""
+        if idio_vol > IDIO_VOL_HIGH_THRESHOLD:
+            risk_level = "(High stock-specific risk)"
+        elif idio_vol < IDIO_VOL_LOW_THRESHOLD:
+            risk_level = "(Low stock-specific risk)"
+        lines.append(f"Idio Vol         {idio_vol:4.1f}%   {risk_level}")
+    if total_vol is not None:
+        lines.append(f"Total Vol        {total_vol:4.1f}%")
+    lines.append("")
+
+    # Valuation
+    has_valuation = False
+    trailing_pe = data.get("trailing_pe")
+    forward_pe = data.get("forward_pe")
+    dividend_yield = data.get("dividend_yield")
+
+    if any(x is not None for x in [trailing_pe, forward_pe, dividend_yield]):
+        lines.append("VALUATION")
+        has_valuation = True
+
+    if trailing_pe is not None:
+        lines.append(f"P/E Ratio        {trailing_pe:6.2f}")
+    if forward_pe is not None:
+        lines.append(f"Forward P/E      {forward_pe:6.2f}")
+    if dividend_yield is not None:
+        lines.append(f"Dividend Yield   {dividend_yield:5.2f}%")
+
+    if has_valuation:
+        lines.append("")
+
+    # Earnings and dividend calendar section
+    calendar = data.get("calendar")
+    has_calendar = False
+    if calendar:
+        earnings_date = calendar.get("Earnings Date")
+        earnings_avg = calendar.get("Earnings Average")
+        div_date = calendar.get("Dividend Date")
+        ex_div_date = calendar.get("Ex-Dividend Date")
+
+        if earnings_date or div_date or ex_div_date:
+            lines.append("CALENDAR")
+            has_calendar = True
+
+        if earnings_date and isinstance(earnings_date, list) and earnings_date:
+            date_str = earnings_date[0].strftime("%b %d, %Y")
+            line = f"Earnings         {date_str}"
+            if earnings_avg is not None:
+                line += f"  (Est ${earnings_avg:.2f} EPS)"
+            lines.append(line)
+
+        if ex_div_date:
+            date_str = ex_div_date.strftime("%b %d, %Y")
+            lines.append(f"Ex-Dividend      {date_str}")
+
+        if div_date:
+            date_str = div_date.strftime("%b %d, %Y")
+            lines.append(f"Div Payment      {date_str}")
+
+    if has_calendar:
+        lines.append("")
+
+    # Momentum & Technicals
+    lines.append("MOMENTUM & TECHNICALS")
+    mom_1m = data.get("momentum_1m")
+    mom_1y = data.get("momentum_1y")
+    if mom_1m is not None:
+        lines.append(f"1-Month          {mom_1m:+6.1f}%")
+    if mom_1y is not None:
+        lines.append(f"1-Year           {mom_1y:+6.1f}%")
+
+    fifty_day = data.get("fifty_day_avg")
+    two_hundred_day = data.get("two_hundred_day_avg")
+    if fifty_day is not None:
+        lines.append(f"50-Day MA        {fifty_day:7.2f}")
+    if two_hundred_day is not None:
+        lines.append(f"200-Day MA       {two_hundred_day:7.2f}")
+
+    rsi = data.get("rsi")
+    if rsi is not None:
+        rsi_signal = ""
+        if rsi > RSI_OVERBOUGHT:
+            rsi_signal = "(Overbought)"
+        elif rsi < RSI_OVERSOLD:
+            rsi_signal = "(Oversold)"
+        lines.append(f"RSI (14D)        {rsi:5.1f}    {rsi_signal}")
+    lines.append("")
+
+    # 52-Week Range with visual bar
+    fifty_two_high = data.get("fifty_two_week_high")
+    fifty_two_low = data.get("fifty_two_week_low")
+
+    if fifty_two_high is not None and fifty_two_low is not None and price is not None:
+        lines.append("52-WEEK RANGE")
+        lines.append(f"High             {fifty_two_high:7.2f}")
+        lines.append(f"Low              {fifty_two_low:7.2f}")
+
+        # Visual bar showing position in range
+        range_pct = ((price - fifty_two_low) / (fifty_two_high - fifty_two_low)) * 100
+        bar_width = 20
+        filled = int((range_pct / 100) * bar_width)
+        bar = "=" * filled + "░" * (bar_width - filled)
+        lines.append(f"Current          {price:7.2f}  [{bar}]  {range_pct:.0f}% of range")
+        lines.append("")
+
+    # Footer
+    lines.append(f"Data as of {date_str} {time_str} | Source: yfinance")
+    lines.append("Back: markets() | sector('technology')")
+
+    return "\n".join(lines)
+
+
+def format_ticker_batch(data_list: list[dict[str, Any]]) -> str:
+    """Format batch ticker comparison - side-by-side comparison table"""
+    if not data_list:
+        return "ERROR: No ticker data provided"
+
+    now = datetime.now(ZoneInfo("America/New_York"))
+    date_str = now.strftime("%Y-%m-%d")
+    time_str = now.strftime("%H:%M %Z")
+
+    lines = []
+    lines.append(f"TICKER COMPARISON {date_str} {time_str}")
+    lines.append("")
+
+    # Header
+    header = (
+        f"{'SYMBOL':8} {'NAME':30} {'PRICE':>10} {'CHG%':>8} "
+        f"{'BETA':>6} {'IDIO':>6} {'MOM1Y':>8} {'P/E':>8} {'DIV%':>6} {'RSI':>6}"
+    )
+    lines.append(header)
+    lines.append("-" * len(header))
+
+    # Data rows
+    for data in data_list:
+        if data.get("error"):
+            symbol = data.get("symbol", "???")
+            lines.append(f"{symbol:8} ERROR: {data['error']}")
+            continue
+
+        symbol = data.get("symbol", "")[:8]
+        name = data.get("name", "")[:30]
+        price = data.get("price")
+        change_pct = data.get("change_percent")
+        beta_spx = data.get("beta_spx")
+        idio_vol = data.get("idio_vol")
+        mom_1y = data.get("momentum_1y")
+        trailing_pe = data.get("trailing_pe")
+        div_yield = data.get("dividend_yield")
+        rsi = data.get("rsi")
+
+        # Format each field with proper handling of None
+        price_str = f"{price:10.2f}" if price is not None else " " * 10
+        chg_str = f"{change_pct:+7.2f}%" if change_pct is not None else " " * 8
+        beta_str = f"{beta_spx:6.2f}" if beta_spx is not None else " " * 6
+        idio_str = f"{idio_vol:5.1f}%" if idio_vol is not None else " " * 6
+        mom_str = f"{mom_1y:+7.1f}%" if mom_1y is not None else " " * 8
+        pe_str = f"{trailing_pe:8.2f}" if trailing_pe is not None else " " * 8
+        div_str = f"{div_yield:5.2f}%" if div_yield is not None else " " * 6
+        rsi_str = f"{rsi:6.1f}" if rsi is not None else " " * 6
+
+        line = (
+            f"{symbol:8} {name:30} {price_str} {chg_str} "
+            f"{beta_str} {idio_str} {mom_str} {pe_str} {div_str} {rsi_str}"
+        )
+        lines.append(line)
+
+    lines.append("")
+    lines.append(f"Data as of {date_str} {time_str} | Source: yfinance")
+    lines.append("Drill down: ticker('TSLA') for detailed analysis")
 
     return "\n".join(lines)
 

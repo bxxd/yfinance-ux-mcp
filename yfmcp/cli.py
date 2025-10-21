@@ -6,7 +6,8 @@ Usage:
   ./cli list-tools           # Show MCP tool definitions
   ./cli markets              # Market overview screen
   ./cli sector technology    # Sector drill-down screen
-  ./cli ticker TSLA          # Individual ticker screen
+  ./cli ticker TSLA          # Individual ticker screen (detailed)
+  ./cli ticker TSLA F GM     # Batch comparison (table format)
 
 Fast iteration: Calls market_data.py functions directly (no MCP layer)
 """
@@ -19,8 +20,11 @@ import sys
 from .market_data import (
     format_markets,
     format_sector,
+    format_ticker,
+    format_ticker_batch,
     get_markets_data,
     get_sector_data,
+    get_ticker_screen_data,
 )
 from .server import list_tools
 
@@ -64,10 +68,19 @@ def sector_command(name: str) -> int:
     return 0
 
 
-def ticker_command(symbol: str) -> int:
-    """Show ticker() screen"""
-    print(f"ticker('{symbol}') - NOT IMPLEMENTED YET")
-    return 1
+def ticker_command(symbols: list[str]) -> int:
+    """Show ticker() screen - single or batch mode"""
+    if len(symbols) == 1:
+        # Single ticker mode
+        data = get_ticker_screen_data(symbols[0])
+        output = format_ticker(data)
+        print(output)
+    else:
+        # Batch comparison mode
+        data_list = [get_ticker_screen_data(sym) for sym in symbols]
+        output = format_ticker_batch(data_list)
+        print(output)
+    return 0
 
 
 def parse_args() -> argparse.Namespace:
@@ -80,7 +93,8 @@ Examples:
   %(prog)s list-tools
   %(prog)s markets
   %(prog)s sector technology
-  %(prog)s ticker TSLA
+  %(prog)s ticker TSLA                # Single ticker (detailed)
+  %(prog)s ticker TSLA F GM           # Batch comparison (table)
         """
     )
 
@@ -97,8 +111,12 @@ Examples:
     sector_parser.add_argument("name", help="Sector name (e.g., technology)")
 
     # ticker command
-    ticker_parser = subparsers.add_parser("ticker", help="Individual ticker screen")
-    ticker_parser.add_argument("symbol", help="Ticker symbol (e.g., TSLA)")
+    ticker_parser = subparsers.add_parser(
+        "ticker", help="Individual ticker screen or batch comparison"
+    )
+    ticker_parser.add_argument(
+        "symbols", nargs="+", help="Ticker symbol(s) (e.g., TSLA or TSLA F GM)"
+    )
 
     return parser.parse_args()
 
@@ -121,7 +139,7 @@ async def async_main() -> int:
         return sector_command(args.name)
 
     if args.command == "ticker":
-        return ticker_command(args.symbol)
+        return ticker_command(args.symbols)
 
     print(f"Unknown command: {args.command}")
     return 1
