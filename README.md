@@ -2,7 +2,7 @@
 
 Market data tools for idiosyncratic alpha analysis. Powered by yfinance.
 
-**Local MCP server (stdio)** - Runs locally on your machine, connects to Claude Code via standard I/O.
+**Local MCP server (stdio)** - Runs locally on your machine, connects via standard I/O.
 
 Provides fast access to market snapshots, price data, and historical analysis.
 
@@ -34,12 +34,12 @@ Provides fast access to market snapshots, price data, and historical analysis.
 ### Safe Usage (What This Tool Does)
 
 **✅ Appropriate use cases:**
-- Ad-hoc market checks when you ask Claude
-- One-off stock analysis
-- Manual research and thesis development
-- Occasional historical data queries
+- Ad-hoc market checks and analysis
+- One-off stock research
+- Manual thesis development
+- Occasional queries for specific data
 
-All queries are **user-initiated** through Claude Code. Every call has a human in the loop.
+All queries are **user-initiated** and interactive.
 
 ### Unsafe Usage (Don't Do This)
 
@@ -66,9 +66,9 @@ cd idio-yfinance-mcp
 poetry install
 ```
 
-### 2. Configure Claude Code
+### 2. Configure MCP Client
 
-**Note:** This is a local stdio MCP server. It runs on your machine and connects to Claude Code via standard I/O (not HTTP/network). All data stays local.
+**Note:** This is a local stdio MCP server. It runs on your machine and connects to MCP clients via standard I/O (not HTTP/network). All data stays local.
 
 **Method 1: Using make -C (recommended)**
 
@@ -131,13 +131,13 @@ Or manually:
 }
 ```
 
-**Note:** MCP servers in Claude Code are configured per-project in `~/.claude.json`, not in `~/.config/claude/mcp.json`.
+**Note:** For claude CLI users, MCP servers are configured per-project in `~/.claude.json`. Other MCP clients may have different configuration methods.
 
-### 3. Restart Claude Code
+### 3. Restart MCP Client
 
-After configuration, restart Claude Code to load the MCP server.
+After configuration, restart your MCP client to load the server.
 
-**How it works:** Claude Code launches the MCP server as a subprocess and communicates via stdin/stdout. All processing happens locally on your machine.
+**How it works:** The MCP client launches the server as a subprocess and communicates via stdin/stdout. All processing happens locally on your machine.
 
 ## Usage
 
@@ -286,7 +286,7 @@ make help       # Show all commands
 ### Documentation
 
 - **DEVELOPER.md** - Design philosophy, engineering principles, development process
-- **CLAUDE.md** - Import reference for Claude Code
+- **CLAUDE.md** - Additional context and development notes
 
 ### Design Principles
 
