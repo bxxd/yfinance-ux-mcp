@@ -8,11 +8,14 @@ Provides fast access to market snapshots, price data, and historical analysis.
 
 ## Features
 
-- **Market snapshots** - Quick overview of futures, indices, crypto, commodities
-- **Smart defaults** - Automatically shows futures (after hours) or indices (market hours)
-- **Single ticker queries** - Get current price for any stock
-- **Historical data** - Fetch price history for analysis
-- **Human-readable output** - Formatted for immediate use, not raw JSON
+**Bloomberg Terminal-style navigation screens for market data:**
+
+- **markets()** - Complete factor landscape (US equities, global, sectors, styles, commodities, volatility)
+- **sector(name)** - Sector drill-down with top holdings and factor exposures
+- **ticker(symbol)** - Individual security analysis with full factor decomposition
+- **Batch comparison** - Side-by-side stock analysis with key factors
+- **Calendar integration** - Earnings dates, dividend schedules
+- **BBG Lite formatting** - Dense, scannable, professional output
 
 ## Important: Usage Limitations
 
@@ -138,89 +141,119 @@ After configuration, restart Claude Code to load the MCP server.
 
 ## Usage
 
-### Market Snapshot (Auto)
+**Navigation hierarchy like Bloomberg Terminal:**
 
-No parameters needed - automatically shows relevant data based on time:
-
-```python
-mcp__idio_yf__get_market_data()
+```
+markets() → sector('technology') → ticker('AAPL')
 ```
 
-**During market hours** (9:30 AM - 4:00 PM ET, Mon-Fri):
-- US indices (S&P 500, Nasdaq, Dow)
-- Crypto (Bitcoin, Ethereum)
-- Commodities (Gold, Oil WTI, Natural Gas)
+### markets() - Market Overview
 
-**After hours:**
-- US futures (ES, NQ, YM)
-- Crypto (Bitcoin, Ethereum)
-- Commodities (Gold, Oil WTI, Natural Gas)
-
-### Market Snapshot (Custom)
-
-Specify which categories to show:
+Complete factor landscape with no parameters:
 
 ```python
-mcp__idio_yf__get_market_data(
-    data_type='snapshot',
-    categories=['futures', 'europe', 'asia', 'crypto']
-)
+mcp__idio_yf__markets()
 ```
 
-**Available categories:**
-- `us` - S&P 500, Nasdaq, Dow (cash indices)
-- `futures` - ES, NQ, YM futures contracts
-- `europe` - STOXX 50, DAX, FTSE
-- `asia` - Nikkei, Hang Seng, Shanghai
-- `crypto` - Bitcoin, Ethereum
-- `commodities` - Gold, Oil WTI, Natural Gas
-- `all` - Everything
+**Shows:**
+- **US EQUITIES** - S&P 500, Nasdaq, Dow, Russell 2000 (with Beta, 1M/1Y momentum)
+- **GLOBAL** - Europe (STOXX 50), Asia (Nikkei), China (Shanghai)
+- **SECTORS** - All 11 GICS sectors (XLK, XLF, XLV, etc.) with Beta and momentum
+- **STYLES** - Momentum (MTUM), Value (VTV), Growth (VUG), Quality (QUAL), Size (IWM)
+- **COMMODITIES** - Gold, Oil, Natural Gas (with Beta and momentum)
+- **VOLATILITY & RATES** - VIX, 10Y Treasury
 
-### Single Ticker
+Auto-detects market hours (shows futures after hours, indices during market).
 
-Get current price for any stock:
+### sector(name) - Sector Drill-Down
+
+Detailed sector analysis with top holdings:
 
 ```python
-mcp__idio_yf__get_market_data(
-    data_type='current',
-    symbol='AAPL'
-)
+mcp__idio_yf__sector(name='technology')
 ```
 
-### Historical Data
+**Shows:**
+- Sector ETF price and momentum (1M, 1Y)
+- Beta to SPX, idiosyncratic volatility
+- Top 10 holdings with symbol, name, weight, and individual betas
 
-Fetch price history:
+**Available sectors:**
+`technology`, `financials`, `healthcare`, `energy`, `consumer_disc`, `consumer_stpl`, `industrials`, `utilities`, `materials`, `real_estate`, `communication`
+
+### ticker(symbol) - Individual Security Analysis
+
+Complete factor decomposition for stocks:
 
 ```python
-mcp__idio_yf__get_market_data(
-    data_type='history',
-    symbol='TSLA',
-    period='3mo'
-)
+mcp__idio_yf__ticker(symbol='AAPL')
 ```
 
-**Available periods:** `1d`, `5d`, `1mo`, `3mo`, `6mo`, `1y`, `2y`, `5y`, `max`
+**Shows:**
+- **Factor Exposures** - Beta (SPX), idiosyncratic volatility, total volatility
+- **Valuation** - P/E ratio, forward P/E, dividend yield
+- **Calendar** - Next earnings date with estimates, ex-dividend date, payment date
+- **Momentum & Technicals** - 1M/1Y returns, RSI (14D), 50/200-day moving averages
+- **52-Week Range** - Visual bar showing current position
+
+### Batch Comparison
+
+Side-by-side stock comparison:
+
+```python
+mcp__idio_yf__ticker(symbol=['TSLA', 'F', 'GM'])
+```
+
+**Table format showing:** Symbol, Name, Price, Change%, Beta, Idio Vol, 1Y Momentum, P/E, Dividend Yield, RSI
 
 ## Output Format
 
-Market snapshot output:
+**BBG Lite style** - Dense, scannable, professional formatting like Bloomberg Terminal.
+
+**Example ticker() output:**
 
 ```
-=== MARKETS - October 16, 2025 ===
+AAPL US EQUITY                   LAST PRICE  262.24 +9.95  +3.94%
+Apple Inc.                               MKT CAP  3891.7B    VOLUME  90.1M
 
-US FUTURES:
-S&P 500       6733.00 (+0.27%)
-Nasdaq       25089.50 (+0.66%)
-Dow          46568.00 (+0.16%)
+FACTOR EXPOSURES
+Beta (SPX)       1.09
+Idio Vol         21.7%
+Total Vol        32.8%
 
-CRYPTO:
-Bitcoin      $111494.80 (+0.63%)
-Ethereum     $ 4066.60 (+1.99%)
+VALUATION
+P/E Ratio         39.85
+Forward P/E       31.56
+Dividend Yield    0.40%
 
-COMMODITIES:
-Gold         $ 4267.70 (+1.57%)
-Oil WTI      $   58.02 (+0.31%)
-Nat Gas      $    3.01 (-0.20%)
+CALENDAR
+Earnings         Oct 30, 2025  (Est $1.77 EPS)
+Ex-Dividend      Aug 11, 2025
+Div Payment      Aug 14, 2025
+
+MOMENTUM & TECHNICALS
+1-Month            +6.8%
+1-Year            +11.4%
+50-Day MA         241.73
+200-Day MA        222.14
+RSI (14D)         59.5
+
+52-WEEK RANGE
+High              264.38
+Low               169.21
+Current           262.24  [===================░]  98% of range
+```
+
+**Example batch comparison:**
+
+```
+TICKER COMPARISON 2025-10-21 08:42 EDT
+
+SYMBOL   NAME                                PRICE     CHG%   BETA   IDIO    MOM1Y      P/E   DIV%    RSI
+---------------------------------------------------------------------------------------------------------
+AAPL     Apple Inc.                         262.24   +3.94%   1.09  21.7%   +11.4%    39.85  0.40%   59.5
+MSFT     Microsoft Corporation              516.79   +0.63%   1.02  17.0%   +24.3%    37.89  0.70%   48.8
+GOOGL    Alphabet Inc.                      256.55   +1.28%   1.00  25.5%   +57.1%    27.32  0.33%   66.1
 ```
 
 Clean, readable, immediately useful.
@@ -243,30 +276,11 @@ make help       # Show all commands
 **Manual testing (no MCP required):**
 
 ```bash
-# Run tests
-poetry run python tests/test_core.py
-
-# Test core functions directly
-poetry run python -c "
-from yfmcp.market_data import get_market_snapshot, format_market_snapshot
-data = get_market_snapshot(['futures', 'crypto'])
-print(format_market_snapshot(data))
-"
-```
-
-### Project Structure
-
-```
-idio-yfinance-mcp/
-├── yfmcp/              # Core package (all application code)
-│   ├── server.py       # MCP protocol wrapper
-│   ├── market_data.py  # Core business logic (testable independently)
-│   └── cli.py          # CLI tools
-├── tests/              # Tests
-│   └── test_core.py
-├── docs/               # Documentation & exploration
-├── Makefile            # Development commands
-└── pyproject.toml      # Poetry config + mypy/ruff settings
+# Test screens via CLI (no MCP restart needed)
+./cli markets
+./cli sector technology
+./cli ticker AAPL
+./cli ticker TSLA F GM    # Batch comparison
 ```
 
 ### Documentation
