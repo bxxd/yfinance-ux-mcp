@@ -1020,7 +1020,8 @@ yfinance-mcp/
 make all    # Run lint + test (ALWAYS before committing)
 make test   # Run tests only
 make lint   # Run type checking + linting
-make serve  # Run MCP server (stdio mode)
+make run    # Run MCP server (stdio mode)
+make server # Run MCP HTTP server (port 5001)
 ```
 
 ## Dependencies
