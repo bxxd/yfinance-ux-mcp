@@ -216,68 +216,11 @@ async def handle_sse(request: Request) -> Response:
     return Response()
 
 
-# Simple REST endpoints (convenience layer, MCP is primary)
-
-
-async def handle_rest_markets(_request: Request) -> Response:
-    """REST endpoint for markets() - returns BBG Lite text"""
-    try:
-        data = get_markets_data()
-        formatted = format_markets(data)
-        return Response(content=formatted, media_type="text/plain; charset=utf-8")
-    except Exception as e:
-        return Response(
-            content=f"Error: {e!s}", status_code=500, media_type="text/plain"
-        )
-
-
-async def handle_rest_sector(request: Request) -> Response:
-    """REST endpoint for sector() - returns BBG Lite text"""
-    name = request.query_params.get("name", "")
-    if not name:
-        return Response(
-            content="Missing 'name' parameter", status_code=400, media_type="text/plain"
-        )
-
-    try:
-        data = get_sector_data(name)
-        formatted = format_sector(data)
-        return Response(content=formatted, media_type="text/plain; charset=utf-8")
-    except Exception as e:
-        return Response(
-            content=f"Error: {e!s}", status_code=500, media_type="text/plain"
-        )
-
-
-async def handle_rest_ticker(request: Request) -> Response:
-    """REST endpoint for ticker() - returns BBG Lite text"""
-    symbol = request.query_params.get("symbol", "")
-    if not symbol:
-        return Response(
-            content="Missing 'symbol' parameter",
-            status_code=400,
-            media_type="text/plain",
-        )
-
-    try:
-        data = get_ticker_screen_data(symbol)
-        formatted = format_ticker(data)
-        return Response(content=formatted, media_type="text/plain; charset=utf-8")
-    except Exception as e:
-        return Response(
-            content=f"Error: {e!s}", status_code=500, media_type="text/plain"
-        )
-
-
 # Starlette application
 app = Starlette(
     routes=[
         Route("/ping", endpoint=handle_ping, methods=["GET"]),
         Route("/sse", endpoint=handle_sse, methods=["GET"]),
         Mount("/messages", app=sse_transport.handle_post_message),
-        # REST convenience endpoints (MCP is primary)
-        Route("/api/markets", endpoint=handle_rest_markets, methods=["GET"]),
-        Route("/api/sector", endpoint=handle_rest_sector, methods=["GET"]),
-        Route("/api/ticker", endpoint=handle_rest_ticker, methods=["GET"]),
     ]
 )
