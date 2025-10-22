@@ -1,4 +1,4 @@
-.PHONY: help test lint lint-fix mypy ruff serve clean all
+.PHONY: help test lint lint-fix mypy ruff run server clean all
 
 # Default target - show help
 help:
@@ -9,7 +9,8 @@ help:
 	@echo "  make lint-fix   - Auto-fix linting issues where possible"
 	@echo "  make mypy       - Run mypy type checking only"
 	@echo "  make ruff       - Run ruff linting only"
-	@echo "  make serve      - Run MCP server (stdio mode for Claude Code)"
+	@echo "  make run        - Run MCP server (stdio mode for Claude Code)"
+	@echo "  make server     - Run MCP HTTP server (port 5001 for web integration)"
 	@echo "  make clean      - Remove Python cache files"
 	@echo "  make all        - Run lint + test (use before committing)"
 	@echo ""
@@ -42,10 +43,16 @@ lint-fix:
 	@$(MAKE) lint
 
 # Run MCP server via stdio (for Claude Code)
-serve:
+run:
 	@echo "Starting MCP server (stdio mode)..." >&2
 	@echo "Press Ctrl+C to stop" >&2
 	@poetry run python -m yfmcp.server
+
+# Run MCP HTTP server (for web integration)
+server:
+	@echo "Starting MCP HTTP server on http://127.0.0.1:5001..." >&2
+	@echo "Press Ctrl+C to stop" >&2
+	@poetry run uvicorn yfmcp.server_http:app --host 127.0.0.1 --port 5001
 
 # Clean Python cache files
 clean:

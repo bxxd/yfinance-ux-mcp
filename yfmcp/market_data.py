@@ -566,7 +566,7 @@ def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912, PL
 
     # Header
     market_status = "Market hours" if is_market_open() else "After hours"
-    lines = [f"MARKETS {date_str} {time_str} | {market_status}", ""]
+    lines = [f"MARKETS | {market_status}", ""]
 
     # Helper to format line with ticker symbol
     def format_line(key: str, show_ticker: bool = False) -> str | None:
@@ -659,7 +659,6 @@ def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912, PL
 
     # Footer
     lines.append(f"Data as of {date_str} {time_str} | Source: yfinance")
-    lines.append("Drill down: sector('technology') | ticker('AAPL')")
 
     return "\n".join(lines)
 
@@ -760,8 +759,6 @@ def format_sector(data: dict[str, Any]) -> str:
 
     # Footer
     lines.append(f"Data as of {date_str} {time_str} | Source: yfinance")
-    drill_symbol = holdings[0]["symbol"] if holdings else "AAPL"
-    lines.append(f"Back: markets() | Drill down: ticker('{drill_symbol}')")
 
     return "\n".join(lines)
 
@@ -1002,7 +999,6 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
 
     # Footer
     lines.append(f"Data as of {date_str} {time_str} | Source: yfinance")
-    lines.append("Back: markets() | sector('technology')")
 
     return "\n".join(lines)
 
@@ -1061,10 +1057,10 @@ def format_ticker_batch(data_list: list[dict[str, Any]]) -> str:
             f"{beta_str} {idio_str} {mom_str} {pe_str} {div_str} {rsi_str}"
         )
         lines.append(line)
-
     lines.append("")
+
+    # Footer
     lines.append(f"Data as of {date_str} {time_str} | Source: yfinance")
-    lines.append("Drill down: ticker('TSLA') for detailed analysis")
 
     return "\n".join(lines)
 
