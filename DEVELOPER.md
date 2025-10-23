@@ -556,13 +556,29 @@ def calculate_rsi(prices, period=14):
 
 **Momentum (1M, 1Y):**
 ```python
-hist = ticker.history(period='1y')
-current = hist['Close'].iloc[-1]
-one_month_ago = hist['Close'].iloc[-21]  # ~21 trading days
-one_year_ago = hist['Close'].iloc[0]
+# OPTIMIZED: fast_info for current + narrow windows for precise lookback
+# Fetches ~15 days total vs 252 days (94% reduction!)
+ticker = yf.Ticker(symbol)
 
-momentum_1m = ((current - one_month_ago) / one_month_ago) * 100
-momentum_1y = ((current - one_year_ago) / one_year_ago) * 100
+# Current price from fast_info (no history fetch!)
+current_price = ticker.fast_info.get("lastPrice")
+
+# Calculate precise lookback dates (calendar days)
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+now = datetime.now(ZoneInfo("America/New_York"))
+date_1y_ago = now - timedelta(days=365)  # Exact 1 year
+date_1m_ago = now - timedelta(days=30)   # Exact 1 month
+
+# Fetch narrow windows (~7-8 days each) around target dates
+# Returns closest price to target date within window
+price_1y_ago = fetch_price_at_date(symbol, date_1y_ago)
+price_1m_ago = fetch_price_at_date(symbol, date_1m_ago)
+
+# Calculate momentum
+momentum_1y = ((current_price - price_1y_ago) / price_1y_ago * 100)
+momentum_1m = ((current_price - price_1m_ago) / price_1m_ago * 100)
 ```
 
 #### Migration Notes (Oct 2025)
@@ -745,6 +761,7 @@ This matches actual usage - you check futures before market open, indices during
 3. **Format for humans, not machines** - Tools should output ready-to-use information
 4. **Simple beats clever** - Direct API calls beat elaborate fallback logic
 5. **PMF testing works** - Building for immediate use reveals what's actually needed
+6. **Validate optimizations with real data** - "Fast" APIs may measure different things (YTD vs 1Y). Always verify precision matches requirements before declaring optimization complete
 
 ### What We Avoided
 
@@ -752,6 +769,11 @@ This matches actual usage - you check futures before market open, indices during
 - ❌ Caching (not needed - yfinance is fast enough)
 - ❌ Rate limiting (not hitting limits)
 - ❌ Error recovery (errors are rare, fail fast is fine)
+
+**When we DID optimize:**
+- ✅ Reducing API calls to Yahoo Finance (94% reduction) - Evidence-based: being nice to unofficial API
+- ✅ Parallel fetching for factor analysis - Clear benefit: 2x faster idio vol calculations
+- ✅ **BUT**: Only after validating precision with real data (caught YTD vs 1Y issue)
 
 **Over-abstraction:**
 - ❌ Complex type hierarchies
@@ -834,7 +856,60 @@ Raw data:
 
 **Lesson:** Human-readable output means human-readable only. No raw data dumped alongside.
 
+**Mistake 4: Optimizing without validating precision**
+
+Initial momentum optimization used `fast_info['yearChange']` for 1Y momentum:
+```python
+# Seemed optimal (no history fetch!)
+year_change = ticker.fast_info.get("yearChange")
+momentum_1y = float(year_change) * 100  # But this is YTD, not 1Y!
+```
+
+**Problem discovered:** `yearChange` is **YTD** (year-to-date from Jan 1), not trailing 1-year. For TSLA: YTD was +107%, but true 1Y was +105% (1.7% difference). Significant for investment decisions.
+
+**Fixed:** Narrow window approach - fetch 10-day windows around exact dates (365 days ago, 30 days ago):
+```python
+# Current price from fast_info (no fetch!)
+current_price = ticker.fast_info.get("lastPrice")
+
+# Precise lookback: narrow windows (~7-8 days each)
+price_1y_ago = fetch_price_at_date(symbol, now - timedelta(days=365))
+price_1m_ago = fetch_price_at_date(symbol, now - timedelta(days=30))
+
+# Total: ~15 days fetched vs 252 days (94% reduction, still precise!)
+```
+
+**Lesson:** Test assumptions. "Fast" doesn't matter if it's measuring the wrong thing. Validate precision with real data before declaring victory. The narrow window approach gives both speed (94% reduction) AND precision (exact calendar lookback).
+
 ## Code Structure
+
+### Historical Data Module (yfmcp/historical.py)
+
+**Optimized historical data fetching - minimal API calls, parallel execution where possible**
+
+**`calculate_date_range(months)`** - DRY date range calculation
+- Converts months → calendar days with minimal buffer
+- Returns (start_date, end_date) as ISO strings
+
+**`fetch_price_history(symbol, months, interval)`** - Fetch minimal historical data
+- Uses start/end dates instead of period (more explicit)
+- Returns DataFrame with OHLCV data
+
+**`fetch_multiple_histories(symbols, months, interval, max_workers)`** - **Parallel fetching**
+- Fetches multiple symbols concurrently (ThreadPoolExecutor)
+- Returns dict mapping symbol → DataFrame
+- Default max_workers=10
+
+**`fetch_ticker_and_market(symbol, months, market_symbol)`** - **Parallel factor data fetch**
+- Fetches ticker + market (S&P 500) data in parallel
+- Used by `calculate_idio_vol()` for regression analysis
+- Returns tuple (ticker_hist, market_hist)
+
+**`fetch_price_at_date(symbol, target_date, window_days=5)`** - **Narrow window price lookup**
+- Fetches 10-day window around target date (~7-8 days actual data)
+- Finds closest price to target date within window (precise lookback)
+- Used by `calculate_momentum()` for 1M/1Y lookback prices
+- **Key optimization:** ~15 days total vs 252 days (94% reduction)
 
 ### Core Functions (yfmcp/market_data.py)
 
@@ -858,20 +933,33 @@ Raw data:
 - Navigation affordances
 
 **`get_ticker_data(symbol)`** - Fetch individual ticker metrics
-- Basic version exists (price, change_percent)
-- TODO: Expand for full ticker screen (valuation, momentum, technicals)
+- Complete ticker screen: price, valuation, momentum, technicals, calendar
+- Uses optimized momentum calculation (fast_info + minimal history)
 
-**`format_ticker(data)`** - TODO: BBG Lite formatting for ticker screen
+**`format_ticker(data)`** - BBG Lite formatting for ticker screen
+- Factor exposures, valuation, momentum, RSI, 52-week range
+- Navigation affordances
 
 **Helper functions:**
 
 **`is_market_open()`** - Detects US market hours (9:30 AM - 4:00 PM ET, Mon-Fri)
 
-**`calculate_momentum()`** - Calculate 1M, 1Y trailing returns from history
+**`calculate_momentum()`** - **OPTIMIZED:** Calculate 1M, 1Y trailing returns
+- Current price: Uses `fast_info['lastPrice']` (no history fetch!)
+- Lookback prices: Narrow 10-day windows around exact dates (365 days, 30 days)
+- Fetches ~15 days total vs 252 days (**94% reduction**)
+- Finds closest price to target date within window (precise calendar lookback)
+- **Much faster and more Yahoo-friendly** than full year fetch
 
-**`calculate_idio_vol()`** - TODO: Idiosyncratic volatility calculation
+**`calculate_idio_vol()`** - Idiosyncratic volatility calculation
+- **OPTIMIZED:** Uses parallel fetching via `fetch_ticker_and_market()`
+- Regression analysis: ticker returns vs market returns
+- Returns idio vol (stock-specific risk) and total vol
+- **~2x faster** due to parallel execution
 
-**`calculate_rsi()`** - TODO: RSI (14-day) calculation
+**`calculate_rsi(prices, period=14)`** - RSI (14-day) calculation
+- Relative Strength Index from price series
+- Returns single RSI value or None
 
 ### MCP Integration (yfmcp/server.py)
 
@@ -999,11 +1087,13 @@ yfinance-mcp/
 │   ├── __init__.py
 │   ├── server.py       # MCP protocol wrapper
 │   ├── market_data.py  # Core business logic
+│   ├── historical.py   # Optimized historical data fetching (parallel, minimal API calls)
 │   └── cli.py          # CLI tools
 ├── tests/              # Tests (testable independently)
 │   └── test_core.py
 ├── docs/               # Documentation & exploration
-│   └── explore_yfinance.py
+│   ├── explore_yfinance.py
+│   └── YFINANCE_CAPABILITIES.md  # yfinance API reference
 ├── tasks/              # Task tracking
 ├── cli                 # Bash wrapper for CLI
 ├── Makefile            # Development commands (make test, make lint, make all)
@@ -1020,8 +1110,9 @@ yfinance-mcp/
 make all    # Run lint + test (ALWAYS before committing)
 make test   # Run tests only
 make lint   # Run type checking + linting
-make run    # Run MCP server (stdio mode)
-make server # Run MCP HTTP server (port 5001)
+make stdio  # Run MCP server (stdio mode for Claude Code)
+make server # Run MCP HTTP server (port 5001, kills existing, uses nohup)
+make logs   # Tail server logs
 ```
 
 ## Dependencies

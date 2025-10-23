@@ -26,6 +26,7 @@ from .market_data import (
     get_markets_data,
     get_sector_data,
     get_ticker_screen_data,
+    get_ticker_screen_data_batch,
 )
 
 app = Server("yfinance-mcp")
@@ -156,8 +157,8 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:  # noqa: AN
 
         # Check if batch mode (list) or single mode (string)
         if isinstance(symbol, list):
-            # Batch comparison mode
-            data_list = [get_ticker_screen_data(sym) for sym in symbol]
+            # Batch comparison mode - use batch API to avoid hammering Yahoo
+            data_list = get_ticker_screen_data_batch(symbol)
             formatted = format_ticker_batch(data_list)
             return [TextContent(type="text", text=formatted)]
 
