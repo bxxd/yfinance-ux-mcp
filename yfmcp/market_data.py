@@ -87,6 +87,13 @@ MARKET_SYMBOLS = {
     "nikkei": "^N225",
     "hangseng": "^HSI",
     "shanghai": "000001.SS",
+    "kospi": "^KS11",        # South Korea
+    "nifty50": "^NSEI",      # India
+    "asx200": "^AXJO",       # Australia
+    "taiwan": "^TWII",       # Taiwan
+
+    # Latin America
+    "bovespa": "^BVSP",      # Brazil
 
     # Crypto
     "btc": "BTC-USD",
@@ -176,6 +183,8 @@ DISPLAY_NAMES: dict[str, str] = {
     "sp500": "S&P 500", "nasdaq": "Nasdaq", "dow": "Dow", "russell2000": "Russell 2000",
     "stoxx50": "STOXX 50", "dax": "DAX", "ftse": "FTSE", "cac40": "CAC 40",
     "nikkei": "Nikkei", "hangseng": "Hang Seng", "shanghai": "Shanghai",
+    "kospi": "KOSPI", "nifty50": "Nifty 50", "asx200": "ASX 200",
+    "taiwan": "TWSE", "bovespa": "Bovespa",
     "eth": "Ethereum", "sol": "Solana",
     "eurusd": "EUR/USD", "usdjpy": "USD/JPY", "usdcny": "USD/CNY",
     "gbpusd": "GBP/USD", "usdcad": "USD/CAD", "audusd": "AUD/USD",
@@ -402,23 +411,26 @@ def get_ticker_data(symbol: str, include_momentum: bool = False) -> dict[str, An
 
 
 def get_ticker_full_data(symbol: str) -> dict[str, Any]:
-    """Fetch comprehensive ticker data (price, beta, momentum) for markets() screen"""
+    """Fetch comprehensive ticker data (price, momentum) for markets() screen using fast_info"""
     try:
         ticker = yf.Ticker(symbol)
-        info = ticker.info
 
-        price = info.get("regularMarketPrice") or info.get("currentPrice")
-        change_pct = info.get("regularMarketChangePercent")
-        beta = info.get("beta")
+        # Use fast_info instead of info (much faster - no full data fetch)
+        price = ticker.fast_info.get("lastPrice")
+        prev_close = ticker.fast_info.get("previousClose")
 
-        # Get momentum
+        # Calculate change percent from fast_info data
+        change_pct = None
+        if price is not None and prev_close is not None and prev_close != 0:
+            change_pct = ((price - prev_close) / prev_close) * 100
+
+        # Get momentum (already optimized with narrow windows)
         momentum = calculate_momentum(symbol)
 
         return {
             "symbol": symbol,
             "price": price,
             "change_percent": change_pct,
-            "beta": beta,
             "momentum_1m": momentum.get("momentum_1m"),
             "momentum_1y": momentum.get("momentum_1y"),
         }
@@ -508,15 +520,27 @@ def get_markets_data() -> dict[str, dict[str, Any]]:
     """Fetch all market data for markets() screen - complete market overview"""
     # Symbols to fetch - all market factors
     symbols_to_fetch = [
-        # US Equities
+        # US Equities (cash indices)
         ("sp500", "^GSPC"),
         ("nasdaq", "^IXIC"),
         ("dow", "^DJI"),
         ("russell2000", "^RUT"),
-        # Global
-        ("stoxx50", "^STOXX50E"),
+        # US Futures
+        ("es_futures", "ES=F"),
+        ("nq_futures", "NQ=F"),
+        ("ym_futures", "YM=F"),
+        # Global - Asia/Pacific
         ("nikkei", "^N225"),
+        ("hangseng", "^HSI"),
         ("shanghai", "000001.SS"),
+        ("kospi", "^KS11"),
+        ("nifty50", "^NSEI"),
+        ("asx200", "^AXJO"),
+        ("taiwan", "^TWII"),
+        # Global - Europe
+        ("stoxx50", "^STOXX50E"),
+        # Global - Latin America
+        ("bovespa", "^BVSP"),
         # Sectors (all 11 GICS)
         ("tech", "XLK"),
         ("financials", "XLF"),
@@ -572,7 +596,7 @@ def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912, PL
 
     # Header
     market_status = "Market hours" if is_market_open() else "After hours"
-    lines = [f"MARKETS | {market_status}", ""]
+    lines = [f"MARKETS | {market_status} | {date_str} {time_str}", ""]
 
     # Helper to format line with ticker symbol
     def format_line(key: str, show_ticker: bool = False) -> str | None:
@@ -610,16 +634,27 @@ def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912, PL
 
         return line
 
-    # US EQUITIES
+    # US EQUITIES (cash indices)
     lines.append("US EQUITIES                   PRICE     CHANGE       1M         1Y")
     for key in ["sp500", "nasdaq", "dow", "russell2000"]:
         if line := format_line(key):
             lines.append(line)
     lines.append("")
 
+    # US FUTURES
+    lines.append("US FUTURES                    PRICE     CHANGE       1M         1Y")
+    for key in ["es_futures", "nq_futures", "ym_futures"]:
+        if line := format_line(key):
+            lines.append(line)
+    lines.append("")
+
     # GLOBAL
     lines.append("GLOBAL                        PRICE     CHANGE       1M         1Y")
-    for key in ["stoxx50", "nikkei", "shanghai"]:
+    global_keys = [
+        "stoxx50", "nikkei", "hangseng", "shanghai",
+        "kospi", "nifty50", "asx200", "taiwan", "bovespa"
+    ]
+    for key in global_keys:
         if line := format_line(key):
             lines.append(line)
     lines.append("")
@@ -664,7 +699,7 @@ def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912, PL
     lines.append("")
 
     # Footer
-    lines.append(f"Data as of {date_str} {time_str} | Source: yfinance")
+    lines.append("Source: yfinance")
 
     return "\n".join(lines)
 
@@ -706,35 +741,23 @@ def get_sector_data(name: str) -> dict[str, Any]:
             """Fetch price and momentum data for a single holding"""
             try:
                 ticker = yf.Ticker(symbol)
-                info = ticker.info
-                change_pct = info.get("regularMarketChangePercent")
 
-                # Calculate momentum from history
-                mom_1m = None
-                mom_1y = None
-                try:
-                    hist = ticker.history(period="1y")
-                    if not hist.empty and len(hist) > TRADING_DAYS_PER_MONTH:
-                        current = hist["Close"].iloc[-1]
-                        # 1M momentum (approx 21 trading days back)
-                        idx_1m = -TRADING_DAYS_PER_MONTH
-                        if len(hist) >= TRADING_DAYS_PER_MONTH:
-                            one_month_ago = hist["Close"].iloc[idx_1m]
-                        else:
-                            one_month_ago = hist["Close"].iloc[0]
-                        one_year_ago = hist["Close"].iloc[0]
+                # Use fast_info instead of info (much faster)
+                price = ticker.fast_info.get("lastPrice")
+                prev_close = ticker.fast_info.get("previousClose")
 
-                        if one_month_ago:
-                            mom_1m = ((current - one_month_ago) / one_month_ago) * 100
-                        if one_year_ago:
-                            mom_1y = ((current - one_year_ago) / one_year_ago) * 100
-                except Exception:
-                    pass
+                # Calculate change percent
+                change_pct = None
+                if price is not None and prev_close is not None and prev_close != 0:
+                    change_pct = ((price - prev_close) / prev_close) * 100
+
+                # Use optimized momentum calculation (narrow windows, not full year)
+                momentum = calculate_momentum(symbol)
 
                 return {
                     "change_percent": change_pct,
-                    "momentum_1m": mom_1m,
-                    "momentum_1y": mom_1y,
+                    "momentum_1m": momentum.get("momentum_1m"),
+                    "momentum_1y": momentum.get("momentum_1y"),
                 }
             except Exception:
                 return {

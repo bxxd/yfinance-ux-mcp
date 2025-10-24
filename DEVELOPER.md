@@ -913,6 +913,33 @@ price_1m_ago = fetch_price_at_date(symbol, now - timedelta(days=30))
 
 ### Core Functions (yfmcp/market_data.py)
 
+**Performance optimization (Oct 2025):**
+
+We discovered `ticker.info` is SLOW (full data fetch). Use `fast_info` whenever possible:
+
+```python
+# SLOW - fetches comprehensive info object
+ticker = yf.Ticker(symbol)
+info = ticker.info  # Full API call
+price = info.get("regularMarketPrice")
+change_pct = info.get("regularMarketChangePercent")
+
+# FAST - uses lightweight fast_info
+ticker = yf.Ticker(symbol)
+price = ticker.fast_info.get("lastPrice")  # Much faster!
+prev_close = ticker.fast_info.get("previousClose")
+change_pct = ((price - prev_close) / prev_close) * 100  # Calculate locally
+```
+
+**When to use fast_info:**
+- ✅ **Price + change data only** (markets screen, sector holdings) - use fast_info
+- ❌ **Comprehensive data needed** (ticker screen: beta, PE ratios, dividend yield, moving averages) - use ticker.info
+
+**Impact:**
+- markets() screen: 45+ symbols, 7.2 seconds (fast_info + narrow windows + parallel)
+- sector() holdings: 10 symbols, 4.2 seconds (fast_info + narrow windows + parallel)
+- ticker() screen: 1 symbol, ~2-3 seconds (ticker.info justified - needs comprehensive data)
+
 **Screen-based functions (UI navigation model):**
 
 **`get_markets_data()`** - Fetch complete market overview data

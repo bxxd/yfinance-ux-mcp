@@ -1,4 +1,11 @@
-.PHONY: help test lint lint-fix mypy ruff stdio server logs clean all
+.PHONY: help test lint lint-fix mypy ruff stdio run server logs clean all
+
+# Load configuration from .env (create from .env.example if missing)
+-include .env
+export
+
+# Default configuration (fallback if .env not present)
+PORT ?= 5001
 
 # Default target - show help
 help:
@@ -10,7 +17,8 @@ help:
 	@echo "  make mypy       - Run mypy type checking only"
 	@echo "  make ruff       - Run ruff linting only"
 	@echo "  make stdio      - Run MCP server (stdio mode for Claude Code)"
-	@echo "  make server     - Run MCP HTTP server (port 5001, logs to logs/server.log)"
+	@echo "  make run        - Run MCP HTTP server (alias for make server)"
+	@echo "  make server     - Run MCP HTTP server (graceful restart, port $(PORT))"
 	@echo "  make logs       - Tail server logs (logs/server.log)"
 	@echo "  make clean      - Remove Python cache files"
 	@echo "  make all        - Run lint + test (use before committing)"
@@ -49,16 +57,45 @@ stdio:
 	@echo "Press Ctrl+C to stop" >&2
 	@poetry run python -m yfmcp.server
 
+# Run MCP HTTP server (alias for server)
+run: server
+
 # Run MCP HTTP server (for web integration)
+# Uses PID file to track and kill previous server instances
 server:
 	@mkdir -p logs
-	@echo "Stopping existing server..." >&2
-	@-pkill -f "uvicorn.*yfmcp.*server_http" 2>/dev/null
-	@sleep 1
-	@echo "Starting MCP HTTP server on http://127.0.0.1:5001 (logs/server.log)..." >&2
-	@nohup poetry run uvicorn yfmcp.server_http:app --host 127.0.0.1 --port 5001 > logs/server.log 2>&1 &
-	@sleep 1
-	@echo "Server started (logs/server.log)"
+	@# Kill process from PID file if exists
+	@if [ -f logs/server.pid ]; then \
+		OLD_PID=$$(cat logs/server.pid); \
+		if ps -p $$OLD_PID > /dev/null 2>&1; then \
+			echo "Killing previous server (PID $$OLD_PID)..." >&2; \
+			kill $$OLD_PID 2>/dev/null || true; \
+			sleep 1; \
+			if ps -p $$OLD_PID > /dev/null 2>&1; then \
+				echo "Force killing..." >&2; \
+				kill -9 $$OLD_PID 2>/dev/null || true; \
+				sleep 1; \
+			fi; \
+		fi; \
+	fi
+	@# Also kill any process listening on the port (catch orphans)
+	@if lsof -ti:$(PORT) -sTCP:LISTEN > /dev/null 2>&1; then \
+		PORT_PID=$$(lsof -ti:$(PORT) -sTCP:LISTEN); \
+		echo "Killing process on port $(PORT) (PID $$PORT_PID)..." >&2; \
+		kill -9 $$PORT_PID 2>/dev/null || true; \
+		sleep 1; \
+	fi
+	@echo "Starting MCP HTTP server on http://127.0.0.1:$(PORT) (logs/server.log)..." >&2
+	@nohup poetry run uvicorn yfmcp.server_http:app --host 127.0.0.1 --port $(PORT) > logs/server.log 2>&1 & echo $$! > logs/server.pid
+	@# Wait for server to be ready (up to 10 seconds)
+	@for i in 1 2 3 4 5 6 7 8 9 10; do \
+		if curl -s -f http://127.0.0.1:$(PORT)/ping > /dev/null 2>&1; then \
+			echo "Server ready on port $(PORT) (PID $$(cat logs/server.pid))"; \
+			exit 0; \
+		fi; \
+		sleep 1; \
+	done; \
+	echo "Warning: Server may not be ready yet (PID $$(cat logs/server.pid))"
 
 # Tail server logs
 logs:
