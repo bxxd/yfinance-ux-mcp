@@ -184,13 +184,11 @@ DISPLAY_NAMES: dict[str, str] = {
     "oil_wti": "Oil WTI", "natgas": "Nat Gas",
     "us10y": "US 10Y",
     "sp500": "S&P 500", "nasdaq": "Nasdaq", "dow": "Dow", "russell2000": "Russell 2000",
-    # Global indices (region first for easier scanning)
-    "stoxx50": "EU STOXX 50", "dax": "Germany DAX", "ftse": "UK FTSE",
-    "cac40": "France CAC 40",
-    "nikkei": "Japan Nikkei", "hangseng": "HK Hang Seng",
-    "shanghai": "China Shanghai",
-    "kospi": "Korea KOSPI", "nifty50": "India Nifty 50",
-    "asx200": "Australia ASX 200", "taiwan": "Taiwan TWSE", "bovespa": "Brazil Bovespa",
+    # Global indices (region code first for easier scanning)
+    "stoxx50": "EU Stoxx50", "dax": "DE DAX", "ftse": "UK FTSE", "cac40": "FR CAC40",
+    "nikkei": "JP Nikkei", "hangseng": "HK HSI", "shanghai": "CN Shanghai",
+    "kospi": "KR KOSPI", "nifty50": "IN Nifty50", "asx200": "AU ASX200",
+    "taiwan": "TW TWSE", "bovespa": "BR Bovespa",
     "eth": "Ethereum", "sol": "Solana",
     "eurusd": "EUR/USD", "usdjpy": "USD/JPY", "usdcny": "USD/CNY",
     "gbpusd": "GBP/USD", "usdcad": "USD/CAD", "audusd": "AUD/USD",
