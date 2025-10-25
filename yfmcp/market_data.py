@@ -675,9 +675,9 @@ def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912, PL
 
         # Format: NAME  TICKER  PRICE  CHANGE%  [+X.X%  +XX.X%]
         if show_ticker:
-            line = f"{name:17}{ticker:12}{price:10.2f}   {change_pct:+6.2f}%"
+            line = f"{name:16} {ticker:8} {price:10.2f}   {change_pct:+6.2f}%"
         else:
-            line = f"{name:30}{price:10.2f}   {change_pct:+6.2f}%"
+            line = f"{name:16}          {price:10.2f}   {change_pct:+6.2f}%"
 
         # Add momentum columns (only if requested - not for futures)
         if show_momentum:
