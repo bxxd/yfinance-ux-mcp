@@ -658,16 +658,14 @@ def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912, PL
 
     lines = [f"MARKETS | {market_status} | {date_str} {time_str}", ""]
 
-    # Helper to format line with ticker symbol
-    def format_line(key: str, show_ticker: bool = False) -> str | None:
+    # Helper to format line with ticker symbol and optional momentum
+    def format_line(key: str, show_ticker: bool = False, show_momentum: bool = True) -> str | None:
         info = data.get(key)
         if not info or info.get("error"):
             return None
 
         price = info.get("price")
         change_pct = info.get("change_percent")
-        mom_1m = info.get("momentum_1m")
-        mom_1y = info.get("momentum_1y")
 
         if price is None or change_pct is None:
             return None
@@ -677,44 +675,33 @@ def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912, PL
         # Get ticker symbol for drill-down
         ticker = MARKET_SYMBOLS.get(key, "")
 
-        # Format: NAME  TICKER  PRICE  CHANGE%  +X.X%  +XX.X%
+        # Format: NAME  TICKER  PRICE  CHANGE%  [+X.X%  +XX.X%]
         if show_ticker:
             line = f"{name:17}{ticker:12}{price:10.2f}   {change_pct:+6.2f}%"
         else:
             line = f"{name:30}{price:10.2f}   {change_pct:+6.2f}%"
 
-        # Add momentum
-        if mom_1m is not None:
-            line += f"   {mom_1m:+6.1f}%"
-        else:
-            line += "          "
+        # Add momentum columns (only if requested - not for futures)
+        if show_momentum:
+            mom_1m = info.get("momentum_1m")
+            mom_1y = info.get("momentum_1y")
 
-        if mom_1y is not None:
-            line += f"   {mom_1y:+7.1f}%"
+            if mom_1m is not None:
+                line += f"   {mom_1m:+6.1f}%"
+            else:
+                line += "          "
+
+            if mom_1y is not None:
+                line += f"   {mom_1y:+7.1f}%"
 
         return line
-
-    # Helper to format futures line (no momentum - contracts roll over)
-    def format_futures_line(key: str) -> str | None:
-        info = data.get(key)
-        if not info or info.get("error"):
-            return None
-
-        price = info.get("price")
-        change_pct = info.get("change_percent")
-
-        if price is None or change_pct is None:
-            return None
-
-        name = DISPLAY_NAMES.get(key, key)
-        return f"{name:30}{price:10.2f}   {change_pct:+6.2f}%"
 
     # US FUTURES (show first when open - forward-looking sentiment)
     # No 1M/1Y momentum for futures (contracts roll over)
     if futures_are_open:
         lines.append("US FUTURES                    PRICE     CHANGE")
         for key in ["es_futures", "nq_futures", "ym_futures"]:
-            if line := format_futures_line(key):
+            if line := format_line(key, show_momentum=False):
                 lines.append(line)
         lines.append("")
 
