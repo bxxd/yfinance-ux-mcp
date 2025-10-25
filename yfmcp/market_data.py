@@ -629,32 +629,11 @@ def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912, PL
     date_str = now.strftime("%Y-%m-%d")
     time_str = now.strftime("%H:%M %Z")
 
-    # Header with futures status
-    market_is_open = is_market_open()
+    # Header - simple day/date/time (data shows if futures trading)
     futures_are_open = is_futures_open()
+    day_of_week = now.strftime("%a")  # Mon, Tue, Wed, etc.
 
-    if market_is_open:
-        market_status = "Market hours"
-    # After hours - explain why futures aren't showing if they're not
-    elif futures_are_open:
-        market_status = "After hours"
-    # Determine why futures are closed
-    elif now.weekday() == SATURDAY:
-        market_status = "After hours | Futures closed (Saturday)"
-    elif now.weekday() == SUNDAY:
-        market_status = "After hours | Futures closed (Sunday pre-6pm)"
-    elif now.weekday() == FRIDAY:
-        close_time = now.replace(hour=17, minute=0, second=0, microsecond=0)
-        if now >= close_time:
-            market_status = "After hours | Futures closed (Fri 5pm-Sun 6pm)"
-        else:
-            # Maintenance window
-            market_status = "After hours | Futures maintenance (5-6pm)"
-    else:
-        # Weekday maintenance window (5-6pm)
-        market_status = "After hours | Futures maintenance (5-6pm)"
-
-    lines = [f"MARKETS | {market_status} | {date_str} {time_str}", ""]
+    lines = [f"MARKETS | {day_of_week} {date_str} {time_str}", ""]
 
     # Helper to format line with ticker symbol and optional momentum
     def format_line(key: str, show_ticker: bool = False, show_momentum: bool = True) -> str | None:
