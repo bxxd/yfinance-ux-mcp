@@ -15,6 +15,9 @@ from yfmcp.historical import fetch_price_at_date, fetch_ticker_and_market
 
 # Constants
 WEEKEND_START_DAY = 5  # Saturday (Monday = 0, Sunday = 6)
+FRIDAY = 4  # Friday weekday number
+SATURDAY = 5  # Saturday weekday number
+SUNDAY = 6  # Sunday weekday number
 TRADING_DAYS_PER_MONTH = 21  # Approximate trading days in 1 month
 MIN_HISTORY_LEN = 2  # Minimum data points needed for calculations
 
@@ -181,10 +184,13 @@ DISPLAY_NAMES: dict[str, str] = {
     "oil_wti": "Oil WTI", "natgas": "Nat Gas",
     "us10y": "US 10Y",
     "sp500": "S&P 500", "nasdaq": "Nasdaq", "dow": "Dow", "russell2000": "Russell 2000",
-    "stoxx50": "STOXX 50", "dax": "DAX", "ftse": "FTSE", "cac40": "CAC 40",
-    "nikkei": "Nikkei", "hangseng": "Hang Seng", "shanghai": "Shanghai",
-    "kospi": "KOSPI", "nifty50": "Nifty 50", "asx200": "ASX 200",
-    "taiwan": "TWSE", "bovespa": "Bovespa",
+    # Global indices (region first for easier scanning)
+    "stoxx50": "EU STOXX 50", "dax": "Germany DAX", "ftse": "UK FTSE",
+    "cac40": "France CAC 40",
+    "nikkei": "Japan Nikkei", "hangseng": "HK Hang Seng",
+    "shanghai": "China Shanghai",
+    "kospi": "Korea KOSPI", "nifty50": "India Nifty 50",
+    "asx200": "Australia ASX 200", "taiwan": "Taiwan TWSE", "bovespa": "Brazil Bovespa",
     "eth": "Ethereum", "sol": "Solana",
     "eurusd": "EUR/USD", "usdjpy": "USD/JPY", "usdcny": "USD/CNY",
     "gbpusd": "GBP/USD", "usdcad": "USD/CAD", "audusd": "AUD/USD",
@@ -257,6 +263,37 @@ def is_asia_market_open() -> bool:
     market_close = now_jst.replace(hour=15, minute=0, second=0, microsecond=0)
 
     return market_open <= now_jst < market_close
+
+
+def is_futures_open() -> bool:
+    """Check if CME futures markets are open
+
+    CME futures trade nearly 24/5:
+    - Sunday 6:00 PM ET through Friday 5:00 PM ET
+    - Daily maintenance: 5:00 PM - 6:00 PM ET
+    """
+    now_et = datetime.now(ZoneInfo("America/New_York"))
+
+    # Friday after 5:00 PM ET - closed until Sunday 6:00 PM ET
+    if now_et.weekday() == FRIDAY:
+        close_time = now_et.replace(hour=17, minute=0, second=0, microsecond=0)
+        if now_et >= close_time:
+            return False
+
+    # Saturday - closed all day
+    if now_et.weekday() == SATURDAY:
+        return False
+
+    # Sunday before 6:00 PM ET - closed
+    if now_et.weekday() == SUNDAY:
+        open_time = now_et.replace(hour=18, minute=0, second=0, microsecond=0)
+        if now_et < open_time:
+            return False
+
+    # Daily maintenance window: 5:00 PM - 6:00 PM ET (not during maintenance)
+    maintenance_start = now_et.replace(hour=17, minute=0, second=0, microsecond=0)
+    maintenance_end = now_et.replace(hour=18, minute=0, second=0, microsecond=0)
+    return not (maintenance_start <= now_et < maintenance_end)
 
 
 def get_market_status(region: str) -> str:
@@ -594,8 +631,31 @@ def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912, PL
     date_str = now.strftime("%Y-%m-%d")
     time_str = now.strftime("%H:%M %Z")
 
-    # Header
-    market_status = "Market hours" if is_market_open() else "After hours"
+    # Header with futures status
+    market_is_open = is_market_open()
+    futures_are_open = is_futures_open()
+
+    if market_is_open:
+        market_status = "Market hours"
+    # After hours - explain why futures aren't showing if they're not
+    elif futures_are_open:
+        market_status = "After hours"
+    # Determine why futures are closed
+    elif now.weekday() == SATURDAY:
+        market_status = "After hours | Futures closed (Saturday)"
+    elif now.weekday() == SUNDAY:
+        market_status = "After hours | Futures closed (Sunday pre-6pm)"
+    elif now.weekday() == FRIDAY:
+        close_time = now.replace(hour=17, minute=0, second=0, microsecond=0)
+        if now >= close_time:
+            market_status = "After hours | Futures closed (Fri 5pm-Sun 6pm)"
+        else:
+            # Maintenance window
+            market_status = "After hours | Futures maintenance (5-6pm)"
+    else:
+        # Weekday maintenance window (5-6pm)
+        market_status = "After hours | Futures maintenance (5-6pm)"
+
     lines = [f"MARKETS | {market_status} | {date_str} {time_str}", ""]
 
     # Helper to format line with ticker symbol
@@ -634,16 +694,33 @@ def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912, PL
 
         return line
 
-    # US EQUITIES (cash indices)
+    # Helper to format futures line (no momentum - contracts roll over)
+    def format_futures_line(key: str) -> str | None:
+        info = data.get(key)
+        if not info or info.get("error"):
+            return None
+
+        price = info.get("price")
+        change_pct = info.get("change_percent")
+
+        if price is None or change_pct is None:
+            return None
+
+        name = DISPLAY_NAMES.get(key, key)
+        return f"{name:16}          {price:10.2f}   {change_pct:+6.2f}%"
+
+    # US FUTURES (show first when open - forward-looking sentiment)
+    # No 1M/1Y momentum for futures (contracts roll over)
+    if futures_are_open:
+        lines.append("US FUTURES                    PRICE     CHANGE")
+        for key in ["es_futures", "nq_futures", "ym_futures"]:
+            if line := format_futures_line(key):
+                lines.append(line)
+        lines.append("")
+
+    # US EQUITIES (always show - either live during market or close after hours)
     lines.append("US EQUITIES                   PRICE     CHANGE       1M         1Y")
     for key in ["sp500", "nasdaq", "dow", "russell2000"]:
-        if line := format_line(key):
-            lines.append(line)
-    lines.append("")
-
-    # US FUTURES
-    lines.append("US FUTURES                    PRICE     CHANGE       1M         1Y")
-    for key in ["es_futures", "nq_futures", "ym_futures"]:
         if line := format_line(key):
             lines.append(line)
     lines.append("")
