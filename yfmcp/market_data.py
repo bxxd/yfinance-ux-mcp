@@ -679,9 +679,9 @@ def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912, PL
 
         # Format: NAME  TICKER  PRICE  CHANGE%  +X.X%  +XX.X%
         if show_ticker:
-            line = f"{name:16} {ticker:8} {price:10.2f}   {change_pct:+6.2f}%"
+            line = f"{name:17}{ticker:12}{price:10.2f}   {change_pct:+6.2f}%"
         else:
-            line = f"{name:16}          {price:10.2f}   {change_pct:+6.2f}%"
+            line = f"{name:30}{price:10.2f}   {change_pct:+6.2f}%"
 
         # Add momentum
         if mom_1m is not None:
@@ -707,7 +707,7 @@ def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912, PL
             return None
 
         name = DISPLAY_NAMES.get(key, key)
-        return f"{name:16}          {price:10.2f}   {change_pct:+6.2f}%"
+        return f"{name:30}{price:10.2f}   {change_pct:+6.2f}%"
 
     # US FUTURES (show first when open - forward-looking sentiment)
     # No 1M/1Y momentum for futures (contracts roll over)
