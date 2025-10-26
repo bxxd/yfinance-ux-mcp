@@ -1,10 +1,10 @@
-# idio-yfinance-ux-mcp
+# yfinance-ux-mcp
 
-Market data tools for idiosyncratic alpha analysis. Powered by yfinance.
+**For AI agents:** Market data in Bloomberg Terminal format. Not raw JSON - I give you formatted tables you can read directly. Navigate like BBG: `markets()` → `sector('technology')` → `ticker('AAPL')` → `news('AAPL')`. Smart defaults (auto-detects market hours), progressive disclosure (summary → detail).
 
-**Local MCP server (stdio)** - Runs locally on your machine, connects via standard I/O.
+**For humans:** Dense, scannable screens. Factor exposures, momentum, news - all formatted like a professional terminal.
 
-Provides fast access to market snapshots, price data, and historical analysis.
+**Technical:** Local stdio server, powered by yfinance. All queries user-initiated (no automation - this is a research tool, not production infrastructure).
 
 ## Example Output
 
