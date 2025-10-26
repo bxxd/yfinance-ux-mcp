@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "yfinance-mcp"
+name = "yfinance-ux-mcp"
 version = "0.1.0"
-description = "Custom yfinance MCP server for idio project - single flexible tool design"
+description = "Yahoo Finance MCP server with agent-friendly UX. BBG Lite formatted screens, smart defaults, progressive disclosure."
 authors = ["bxxd <bxxd@users.noreply.github.com>"]
 readme = "README.md"
 package-mode = false
@@ -12,7 +12,7 @@ yfinance = "^0.2.48"
 mcp = "^1.1.2"
 
 [tool.poetry.scripts]
-yfinance-mcp = "yfmcp.server:main"
+yfinance-ux-mcp = "yfinance_ux_mcp.server:main"
 
 [build-system]
 requires = ["poetry-core"]

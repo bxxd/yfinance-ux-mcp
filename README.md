@@ -1,4 +1,4 @@
-# idio-yfinance-mcp
+# idio-yfinance-ux-mcp
 
 Market data tools for idiosyncratic alpha analysis. Powered by yfinance.
 
@@ -61,8 +61,8 @@ This MCP server is a **research tool for occasional queries**, not production in
 ### 1. Clone and install dependencies
 
 ```bash
-git clone https://github.com/bxxd/idio-yfinance-mcp.git
-cd idio-yfinance-mcp
+git clone https://github.com/bxxd/idio-yfinance-ux-mcp.git
+cd idio-yfinance-ux-mcp
 poetry install
 ```
 
@@ -75,7 +75,7 @@ poetry install
 From your project directory:
 
 ```bash
-claude mcp add idio-yf make -C /absolute/path/to/yfinance-mcp serve
+claude mcp add idio-yf make -C /absolute/path/to/yfinance-ux-mcp serve
 ```
 
 Or manually add to `~/.claude.json` under your project's `mcpServers`:
@@ -88,7 +88,7 @@ Or manually add to `~/.claude.json` under your project's `mcpServers`:
         "idio-yf": {
           "type": "stdio",
           "command": "make",
-          "args": ["-C", "/absolute/path/to/yfinance-mcp", "serve"],
+          "args": ["-C", "/absolute/path/to/yfinance-ux-mcp", "serve"],
           "env": {}
         }
       }
@@ -108,7 +108,7 @@ Or manually add to `~/.claude.json` under your project's `mcpServers`:
 If you prefer not to use make:
 
 ```bash
-claude mcp add idio-yf poetry run python -m yfmcp.server --cwd /path/to/yfinance-mcp
+claude mcp add idio-yf poetry run python -m yfinance_ux_mcp.server --cwd /path/to/yfinance-ux-mcp
 ```
 
 Or manually:
@@ -121,8 +121,8 @@ Or manually:
         "idio-yf": {
           "type": "stdio",
           "command": "poetry",
-          "args": ["run", "python", "-m", "yfmcp.server"],
-          "cwd": "/absolute/path/to/yfinance-mcp",
+          "args": ["run", "python", "-m", "yfinance_ux_mcp.server"],
+          "cwd": "/absolute/path/to/yfinance-ux-mcp",
           "env": {}
         }
       }

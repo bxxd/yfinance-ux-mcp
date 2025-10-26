@@ -7,11 +7,11 @@ Demonstrates proper separation of concerns
 import sys
 from pathlib import Path
 
-# Add project root to path so we can import yfmcp
+# Add project root to path so we can import yfinance_ux_mcp
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from yfmcp.market_data import (
+from yfinance_ux_mcp.market_data import (
     is_market_open,
     get_ticker_data,
     get_market_snapshot,

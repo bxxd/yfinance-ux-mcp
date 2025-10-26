@@ -8,7 +8,7 @@ Custom Model Context Protocol server for Yahoo Finance data - built for idio pro
 
 **All code belongs in the package, not scattered in root.**
 
-- `yfmcp/` - Core package (business logic, testable independently)
+- `yfinance_ux_mcp/` - Core package (business logic, testable independently)
   - `market_data.py` - Market data functions (no MCP dependencies)
   - `server.py` - MCP protocol wrapper (thin layer)
   - `cli.py` - CLI tools
@@ -42,7 +42,7 @@ If you find yourself writing the same code twice:
 
 ### No Root Clutter
 
-**Keep root directory clean.** All application code goes in `yfmcp/` package.
+**Keep root directory clean.** All application code goes in `yfinance_ux_mcp/` package.
 
 **What belongs in root:**
 - `pyproject.toml` - Project config
@@ -51,8 +51,8 @@ If you find yourself writing the same code twice:
 - `CLAUDE.md` - Import reference
 
 **What doesn't belong in root:**
-- ~~server.py~~ → `yfmcp/server.py`
-- ~~cli.py~~ → `yfmcp/cli.py`
+- ~~server.py~~ → `yfinance_ux_mcp/server.py`
+- ~~cli.py~~ → `yfinance_ux_mcp/cli.py`
 - ~~test_core.py~~ → `tests/test_core.py`
 
 ### Strict Type Checking & Linting (Rust-Style)
@@ -72,8 +72,8 @@ make test       # Run tests
 make lint-fix   # Auto-fix linting issues
 
 # Or use poetry directly
-poetry run mypy yfmcp/
-poetry run ruff check yfmcp/
+poetry run mypy yfinance_ux_mcp/
+poetry run ruff check yfinance_ux_mcp/
 ```
 
 **All code must:**
@@ -186,7 +186,7 @@ if symbol in symbol_set:  # O(1)
 *Profiling (find real bottlenecks):*
 ```bash
 # Profile with cProfile (built-in)
-python -m cProfile -s cumulative -m yfmcp.server
+python -m cProfile -s cumulative -m yfinance_ux_mcp.server
 
 # Or use py-spy for live profiling (install: pip install py-spy)
 py-spy top --pid <process_id>
@@ -199,7 +199,7 @@ elapsed = time.perf_counter() - start
 print(f"Took {elapsed:.4f}s")
 
 # Benchmark with timeit (for small code snippets)
-python -m timeit -s "from yfmcp.market_data import get_ticker_data" \
+python -m timeit -s "from yfinance_ux_mcp.market_data import get_ticker_data" \
   "get_ticker_data('AAPL')"
 ```
 
@@ -883,7 +883,7 @@ price_1m_ago = fetch_price_at_date(symbol, now - timedelta(days=30))
 
 ## Code Structure
 
-### Historical Data Module (yfmcp/historical.py)
+### Historical Data Module (yfinance_ux_mcp/historical.py)
 
 **Optimized historical data fetching - minimal API calls, parallel execution where possible**
 
@@ -911,7 +911,7 @@ price_1m_ago = fetch_price_at_date(symbol, now - timedelta(days=30))
 - Used by `calculate_momentum()` for 1M/1Y lookback prices
 - **Key optimization:** ~15 days total vs 252 days (94% reduction)
 
-### Core Functions (yfmcp/market_data.py)
+### Core Functions (yfinance_ux_mcp/market_data.py)
 
 **Performance optimization (Oct 2025):**
 
@@ -988,7 +988,7 @@ change_pct = ((price - prev_close) / prev_close) * 100  # Calculate locally
 - Relative Strength Index from price series
 - Returns single RSI value or None
 
-### MCP Integration (yfmcp/server.py)
+### MCP Integration (yfinance_ux_mcp/server.py)
 
 **`list_tools()`** - Defines screen-based tools:
 - `markets` - Market overview (no params)
@@ -1007,9 +1007,9 @@ change_pct = ((price - prev_close) / prev_close) * 100  # Calculate locally
 ### Manual Testing First
 
 ```bash
-cd /path/to/yfinance-mcp
+cd /path/to/yfinance-ux-mcp
 poetry run python -c "
-from yfmcp.market_data import get_markets_data, format_markets
+from yfinance_ux_mcp.market_data import get_markets_data, format_markets
 
 data = get_markets_data()
 print(format_markets(data))
@@ -1018,7 +1018,7 @@ print(format_markets(data))
 
 This must output exactly what you want before wrapping in MCP.
 
-**Note:** Core functions in `yfmcp/market_data.py` are testable independently (no MCP required).
+**Note:** Core functions in `yfinance_ux_mcp/market_data.py` are testable independently (no MCP required).
 
 ### CLI Testing (No MCP Required)
 
@@ -1109,8 +1109,8 @@ Add features only when:
 ## File Structure
 
 ```
-yfinance-mcp/
-├── yfmcp/              # Core package (all application code)
+yfinance-ux-mcp/
+├── yfinance_ux_mcp/              # Core package (all application code)
 │   ├── __init__.py
 │   ├── server.py       # MCP protocol wrapper
 │   ├── market_data.py  # Core business logic
@@ -1130,7 +1130,7 @@ yfinance-mcp/
 └── README.md           # User documentation
 ```
 
-**Key principle:** All application code lives in `yfmcp/` package. Root is clean (only config, docs, and CLI wrapper).
+**Key principle:** All application code lives in `yfinance_ux_mcp/` package. Root is clean (only config, docs, and CLI wrapper).
 
 **Development workflow:**
 ```bash
@@ -1160,7 +1160,7 @@ No extras. No optional dependencies. Keep it minimal.
 **Engineering Principles:**
 - **Separation of Concerns** - Business logic (zero MCP deps) + thin protocol wrapper
 - **Single Source of Truth** - One true path for every piece of data/logic
-- **No Root Clutter** - All application code in `yfmcp/` package
+- **No Root Clutter** - All application code in `yfinance_ux_mcp/` package
 - **DRY** - Don't repeat yourself, import instead
 - **Strict Checking** - Zero warnings/errors (mypy strict + ruff comprehensive)
 - **High Standards** - Don't be sloppy (use right data structures, clean code, no premature optimization)

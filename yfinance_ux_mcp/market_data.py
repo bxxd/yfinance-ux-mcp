@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import yfinance as yf  # type: ignore[import-untyped]
 
-from yfmcp.historical import fetch_price_at_date, fetch_ticker_and_market
+from yfinance_ux_mcp.historical import fetch_price_at_date, fetch_ticker_and_market
 
 # Constants
 WEEKEND_START_DAY = 5  # Saturday (Monday = 0, Sunday = 6)
