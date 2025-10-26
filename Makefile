@@ -9,7 +9,7 @@ PORT ?= 5001
 
 # Default target - show help
 help:
-	@echo "yfinance-mcp development commands:"
+	@echo "yfinance-ux-mcp development commands:"
 	@echo ""
 	@echo "  make test       - Run all tests"
 	@echo "  make lint       - Run type checking (mypy) and linting (ruff)"
@@ -33,12 +33,12 @@ test:
 # Run type checking only
 mypy:
 	@echo "Running mypy type checker..."
-	@poetry run mypy yfmcp/
+	@poetry run mypy yfinance_ux_mcp/
 
 # Run linting only
 ruff:
 	@echo "Running ruff linter..."
-	@poetry run ruff check yfmcp/
+	@poetry run ruff check yfinance_ux_mcp/
 
 # Run both type checking and linting
 lint: mypy ruff
@@ -47,7 +47,7 @@ lint: mypy ruff
 # Auto-fix linting issues and run checks
 lint-fix:
 	@echo "Auto-fixing linting issues..."
-	@poetry run ruff check --fix yfmcp/
+	@poetry run ruff check --fix yfinance_ux_mcp/
 	@echo ""
 	@$(MAKE) lint
 
@@ -55,7 +55,7 @@ lint-fix:
 stdio:
 	@echo "Starting MCP server (stdio mode)..." >&2
 	@echo "Press Ctrl+C to stop" >&2
-	@poetry run python -m yfmcp.server
+	@poetry run python -m yfinance_ux_mcp.server
 
 # Run MCP HTTP server (alias for server)
 run: server
@@ -86,7 +86,7 @@ server:
 		sleep 1; \
 	fi
 	@echo "Starting MCP HTTP server on http://127.0.0.1:$(PORT) (logs/server.log)..." >&2
-	@nohup poetry run uvicorn yfmcp.server_http:app --host 127.0.0.1 --port $(PORT) > logs/server.log 2>&1 & echo $$! > logs/server.pid
+	@nohup poetry run uvicorn yfinance_ux_mcp.server_http:app --host 127.0.0.1 --port $(PORT) > logs/server.log 2>&1 & echo $$! > logs/server.pid
 	@# Wait for server to be ready (up to 10 seconds)
 	@for i in 1 2 3 4 5 6 7 8 9 10; do \
 		if curl -s -f http://127.0.0.1:$(PORT)/ping > /dev/null 2>&1; then \

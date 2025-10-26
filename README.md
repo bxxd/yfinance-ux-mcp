@@ -1,10 +1,39 @@
-# idio-yfinance-mcp
+# yfinance-ux-mcp
 
-Market data tools for idiosyncratic alpha analysis. Powered by yfinance.
+**For AI agents:** Market data in Bloomberg Terminal format. Not raw JSON - I give you formatted tables you can read directly. Navigate like BBG: `markets()` → `sector('technology')` → `ticker('AAPL')` → `news('AAPL')`. Smart defaults (auto-detects market hours), progressive disclosure (summary → detail).
 
-**Local MCP server (stdio)** - Runs locally on your machine, connects via standard I/O.
+**For humans:** Dense, scannable screens. Factor exposures, momentum, news - all formatted like a professional terminal.
 
-Provides fast access to market snapshots, price data, and historical analysis.
+**Technical:** Local stdio server, powered by yfinance. All queries user-initiated (no automation - this is a research tool, not production infrastructure).
+
+## Example Output
+
+**Our differentiator: BBG Lite formatted, agent-friendly screens**
+
+```
+MARKETS | Sun 2025-10-26 12:42 EDT
+
+US EQUITIES                   PRICE     CHANGE       1M         1Y
+S&P 500                      6791.69    +0.79%     +2.2%     +16.9%
+Nasdaq                      23204.87    +1.15%     +3.2%     +25.3%
+Dow                         47207.12    +1.01%     +2.1%     +12.1%
+Russell 2000                 2513.47    +1.24%     +3.3%     +13.8%
+
+SECTORS          TICKER      PRICE     CHANGE       1M         1Y
+Technology       XLK          293.58    +1.23%     +5.3%     +28.3%
+Financials       XLF           53.11    +0.84%     -1.4%     +15.6%
+Healthcare       XLV          146.03    -0.05%     +7.8%      +0.0%
+Energy           XLE           88.07    -1.01%     -4.3%      +1.4%
+[... all 11 GICS sectors]
+
+COMMODITIES                   PRICE     CHANGE       1M         1Y
+Gold                         4137.80    +0.05%     +9.6%     +51.0%
+Oil WTI                        61.50    +0.10%     -6.4%     -14.3%
+
+Data as of 2025-10-26 12:42 EDT | Source: yfinance
+```
+
+Dense, scannable, professional. Not raw JSON - formatted for humans, AI benefits automatically.
 
 ## Features
 
@@ -61,8 +90,8 @@ This MCP server is a **research tool for occasional queries**, not production in
 ### 1. Clone and install dependencies
 
 ```bash
-git clone https://github.com/bxxd/idio-yfinance-mcp.git
-cd idio-yfinance-mcp
+git clone https://github.com/bxxd/idio-yfinance-ux-mcp.git
+cd idio-yfinance-ux-mcp
 poetry install
 ```
 
@@ -75,7 +104,7 @@ poetry install
 From your project directory:
 
 ```bash
-claude mcp add idio-yf make -C /absolute/path/to/yfinance-mcp serve
+claude mcp add idio-yf make -C /absolute/path/to/yfinance-ux-mcp serve
 ```
 
 Or manually add to `~/.claude.json` under your project's `mcpServers`:
@@ -88,7 +117,7 @@ Or manually add to `~/.claude.json` under your project's `mcpServers`:
         "idio-yf": {
           "type": "stdio",
           "command": "make",
-          "args": ["-C", "/absolute/path/to/yfinance-mcp", "serve"],
+          "args": ["-C", "/absolute/path/to/yfinance-ux-mcp", "serve"],
           "env": {}
         }
       }
@@ -108,7 +137,7 @@ Or manually add to `~/.claude.json` under your project's `mcpServers`:
 If you prefer not to use make:
 
 ```bash
-claude mcp add idio-yf poetry run python -m yfmcp.server --cwd /path/to/yfinance-mcp
+claude mcp add idio-yf poetry run python -m yfinance_ux_mcp.server --cwd /path/to/yfinance-ux-mcp
 ```
 
 Or manually:
@@ -121,8 +150,8 @@ Or manually:
         "idio-yf": {
           "type": "stdio",
           "command": "poetry",
-          "args": ["run", "python", "-m", "yfmcp.server"],
-          "cwd": "/absolute/path/to/yfinance-mcp",
+          "args": ["run", "python", "-m", "yfinance_ux_mcp.server"],
+          "cwd": "/absolute/path/to/yfinance-ux-mcp",
           "env": {}
         }
       }

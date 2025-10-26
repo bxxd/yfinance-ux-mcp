@@ -20,10 +20,12 @@ from mcp.types import TextContent, Tool
 
 from .market_data import (
     format_markets,
+    format_news,
     format_sector,
     format_ticker,
     format_ticker_batch,
     get_markets_data,
+    get_news_data,
     get_sector_data,
     get_ticker_screen_data,
     get_ticker_screen_data_batch,
@@ -129,6 +131,35 @@ Output: BBG Lite formatted text (dense, scannable, professional).
                 "required": ["symbol"]
             }
         ),
+        Tool(
+            name="news",
+            description="""
+News screen - recent articles for a ticker.
+
+Shows:
+- All available news articles (typically 10)
+- Full headlines with timestamps
+- Article summaries (1-2 sentences)
+- Source attribution (Yahoo Finance, Reuters, Bloomberg, etc.)
+- Read URLs for full articles
+
+Input: symbol as string (e.g., 'TSLA')
+
+Output: BBG Lite formatted text with progressive disclosure.
+
+Navigation: Back to ticker('TSLA') for price/factor data
+""",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "symbol": {
+                        "type": "string",
+                        "description": "Ticker symbol (e.g., 'TSLA', 'AAPL')",
+                    }
+                },
+                "required": ["symbol"]
+            }
+        ),
     ]
 
 
@@ -165,6 +196,15 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:  # noqa: AN
         # Single ticker mode
         data = get_ticker_screen_data(symbol)
         formatted = format_ticker(data)
+        return [TextContent(type="text", text=formatted)]
+
+    if name == "news":
+        symbol = arguments.get("symbol")
+        if not symbol:
+            msg = "news() requires 'symbol' parameter"
+            raise ValueError(msg)
+        data = get_news_data(symbol)
+        formatted = format_news(data)
         return [TextContent(type="text", text=formatted)]
 
     msg = f"Unknown tool: {name}"

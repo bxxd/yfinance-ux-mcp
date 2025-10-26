@@ -11,10 +11,13 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import yfinance as yf  # type: ignore[import-untyped]
 
-from yfmcp.historical import fetch_price_at_date, fetch_ticker_and_market
+from yfinance_ux_mcp.historical import fetch_price_at_date, fetch_ticker_and_market
 
 # Constants
 WEEKEND_START_DAY = 5  # Saturday (Monday = 0, Sunday = 6)
+FRIDAY = 4  # Friday weekday number
+SATURDAY = 5  # Saturday weekday number
+SUNDAY = 6  # Sunday weekday number
 TRADING_DAYS_PER_MONTH = 21  # Approximate trading days in 1 month
 MIN_HISTORY_LEN = 2  # Minimum data points needed for calculations
 
@@ -181,10 +184,11 @@ DISPLAY_NAMES: dict[str, str] = {
     "oil_wti": "Oil WTI", "natgas": "Nat Gas",
     "us10y": "US 10Y",
     "sp500": "S&P 500", "nasdaq": "Nasdaq", "dow": "Dow", "russell2000": "Russell 2000",
-    "stoxx50": "STOXX 50", "dax": "DAX", "ftse": "FTSE", "cac40": "CAC 40",
-    "nikkei": "Nikkei", "hangseng": "Hang Seng", "shanghai": "Shanghai",
-    "kospi": "KOSPI", "nifty50": "Nifty 50", "asx200": "ASX 200",
-    "taiwan": "TWSE", "bovespa": "Bovespa",
+    # Global indices (region code first for easier scanning)
+    "stoxx50": "EU Stoxx50", "dax": "DE DAX", "ftse": "UK FTSE", "cac40": "FR CAC40",
+    "nikkei": "JP Nikkei", "hangseng": "HK HSI", "shanghai": "CN Shanghai",
+    "kospi": "KR KOSPI", "nifty50": "IN Nifty50", "asx200": "AU ASX200",
+    "taiwan": "TW TWSE", "bovespa": "BR Bovespa",
     "eth": "Ethereum", "sol": "Solana",
     "eurusd": "EUR/USD", "usdjpy": "USD/JPY", "usdcny": "USD/CNY",
     "gbpusd": "GBP/USD", "usdcad": "USD/CAD", "audusd": "AUD/USD",
@@ -257,6 +261,37 @@ def is_asia_market_open() -> bool:
     market_close = now_jst.replace(hour=15, minute=0, second=0, microsecond=0)
 
     return market_open <= now_jst < market_close
+
+
+def is_futures_open() -> bool:
+    """Check if CME futures markets are open
+
+    CME futures trade nearly 24/5:
+    - Sunday 6:00 PM ET through Friday 5:00 PM ET
+    - Daily maintenance: 5:00 PM - 6:00 PM ET
+    """
+    now_et = datetime.now(ZoneInfo("America/New_York"))
+
+    # Friday after 5:00 PM ET - closed until Sunday 6:00 PM ET
+    if now_et.weekday() == FRIDAY:
+        close_time = now_et.replace(hour=17, minute=0, second=0, microsecond=0)
+        if now_et >= close_time:
+            return False
+
+    # Saturday - closed all day
+    if now_et.weekday() == SATURDAY:
+        return False
+
+    # Sunday before 6:00 PM ET - closed
+    if now_et.weekday() == SUNDAY:
+        open_time = now_et.replace(hour=18, minute=0, second=0, microsecond=0)
+        if now_et < open_time:
+            return False
+
+    # Daily maintenance window: 5:00 PM - 6:00 PM ET (not during maintenance)
+    maintenance_start = now_et.replace(hour=17, minute=0, second=0, microsecond=0)
+    maintenance_end = now_et.replace(hour=18, minute=0, second=0, microsecond=0)
+    return not (maintenance_start <= now_et < maintenance_end)
 
 
 def get_market_status(region: str) -> str:
@@ -594,20 +629,20 @@ def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912, PL
     date_str = now.strftime("%Y-%m-%d")
     time_str = now.strftime("%H:%M %Z")
 
-    # Header
-    market_status = "Market hours" if is_market_open() else "After hours"
-    lines = [f"MARKETS | {market_status} | {date_str} {time_str}", ""]
+    # Header - simple day/date/time (data shows if futures trading)
+    futures_are_open = is_futures_open()
+    day_of_week = now.strftime("%a")  # Mon, Tue, Wed, etc.
 
-    # Helper to format line with ticker symbol
-    def format_line(key: str, show_ticker: bool = False) -> str | None:
+    lines = [f"MARKETS | {day_of_week} {date_str} {time_str}", ""]
+
+    # Helper to format line with ticker symbol and optional momentum
+    def format_line(key: str, show_ticker: bool = False, show_momentum: bool = True) -> str | None:
         info = data.get(key)
         if not info or info.get("error"):
             return None
 
         price = info.get("price")
         change_pct = info.get("change_percent")
-        mom_1m = info.get("momentum_1m")
-        mom_1y = info.get("momentum_1y")
 
         if price is None or change_pct is None:
             return None
@@ -617,33 +652,39 @@ def format_markets(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR0912, PL
         # Get ticker symbol for drill-down
         ticker = MARKET_SYMBOLS.get(key, "")
 
-        # Format: NAME  TICKER  PRICE  CHANGE%  +X.X%  +XX.X%
+        # Format: NAME  TICKER  PRICE  CHANGE%  [+X.X%  +XX.X%]
         if show_ticker:
             line = f"{name:16} {ticker:8} {price:10.2f}   {change_pct:+6.2f}%"
         else:
             line = f"{name:16}          {price:10.2f}   {change_pct:+6.2f}%"
 
-        # Add momentum
-        if mom_1m is not None:
-            line += f"   {mom_1m:+6.1f}%"
-        else:
-            line += "          "
+        # Add momentum columns (only if requested - not for futures)
+        if show_momentum:
+            mom_1m = info.get("momentum_1m")
+            mom_1y = info.get("momentum_1y")
 
-        if mom_1y is not None:
-            line += f"   {mom_1y:+7.1f}%"
+            if mom_1m is not None:
+                line += f"   {mom_1m:+6.1f}%"
+            else:
+                line += "          "
+
+            if mom_1y is not None:
+                line += f"   {mom_1y:+7.1f}%"
 
         return line
 
-    # US EQUITIES (cash indices)
+    # US FUTURES (show first when open - forward-looking sentiment)
+    # No 1M/1Y momentum for futures (contracts roll over)
+    if futures_are_open:
+        lines.append("US FUTURES                    PRICE     CHANGE")
+        for key in ["es_futures", "nq_futures", "ym_futures"]:
+            if line := format_line(key, show_momentum=False):
+                lines.append(line)
+        lines.append("")
+
+    # US EQUITIES (always show - either live during market or close after hours)
     lines.append("US EQUITIES                   PRICE     CHANGE       1M         1Y")
     for key in ["sp500", "nasdaq", "dow", "russell2000"]:
-        if line := format_line(key):
-            lines.append(line)
-    lines.append("")
-
-    # US FUTURES
-    lines.append("US FUTURES                    PRICE     CHANGE       1M         1Y")
-    for key in ["es_futures", "nq_futures", "ym_futures"]:
         if line := format_line(key):
             lines.append(line)
     lines.append("")
@@ -929,6 +970,14 @@ def get_ticker_screen_data(symbol: str) -> dict[str, Any]:
         except Exception:
             pass  # Calendar not available for non-stocks (indices, ETFs, etc.)
 
+        # Get news (5 most recent for preview)
+        news_preview = []
+        try:
+            news = ticker.get_news()
+            news_preview = news[:5] if news else []  # First 5 articles
+        except Exception:
+            pass
+
         return {
             "symbol": symbol,
             "name": name,
@@ -951,6 +1000,7 @@ def get_ticker_screen_data(symbol: str) -> dict[str, Any]:
             "total_vol": vol_data.get("total_vol"),
             "rsi": rsi,
             "calendar": calendar,
+            "news_preview": news_preview,
         }
     except Exception as e:
         return {"symbol": symbol, "error": str(e)}
@@ -1014,6 +1064,14 @@ def get_ticker_screen_data_batch(symbols: list[str]) -> list[dict[str, Any]]:
             except Exception:
                 pass  # Calendar not available for non-stocks (indices, ETFs, etc.)
 
+            # Get news (5 most recent for preview)
+            news_preview = []
+            try:
+                news = ticker_obj.get_news()
+                news_preview = news[:5] if news else []  # First 5 articles
+            except Exception:
+                pass
+
             results.append({
                 "symbol": symbol,
                 "name": name,
@@ -1036,6 +1094,7 @@ def get_ticker_screen_data_batch(symbols: list[str]) -> list[dict[str, Any]]:
                 "total_vol": vol_data.get("total_vol"),
                 "rsi": rsi,
                 "calendar": calendar,
+                "news_preview": news_preview,
             })
         except Exception as e:
             results.append({"symbol": symbol, "error": str(e)})
@@ -1202,6 +1261,30 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
         lines.append(f"Current          {price:7.2f}  [{bar}]  {range_pct:.0f}% of range")
         lines.append("")
 
+    # News preview (5 most recent headlines)
+    news_preview = data.get("news_preview", [])
+    if news_preview:
+        total_count = len(news_preview)
+        lines.append(f"RECENT NEWS ({total_count} of 10+ articles, see all: news('{symbol}'))")
+        for article in news_preview[:5]:  # Show max 5
+            content = article.get("content", {})
+            # Parse pub date
+            pub_date_str = content.get("pubDate", "")
+            try:
+                pub_date = datetime.fromisoformat(pub_date_str.replace("Z", "+00:00"))
+                date_formatted = pub_date.strftime("[%m-%d]")
+            except Exception:
+                date_formatted = "[??-??]"
+
+            title = content.get("title", "No title")
+            provider = content.get("provider", {}).get("displayName", "Unknown")
+            # Truncate title if too long
+            max_title_len = 70
+            if len(title) > max_title_len:
+                title = title[:max_title_len-3] + "..."
+            lines.append(f"{date_formatted} {title} ({provider})")
+        lines.append("")
+
     # Footer
     lines.append(f"Data as of {date_str} {time_str} | Source: yfinance")
 
@@ -1350,5 +1433,89 @@ def format_market_snapshot(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR
         "Try: symbol='TSLA' for ticker | categories=['europe'] for regions | "
         "period='3mo' for history"
     )
+
+    return "\n".join(lines)
+
+
+def get_news_data(symbol: str) -> dict[str, Any]:
+    """Fetch news articles for a ticker symbol"""
+    ticker = yf.Ticker(symbol)
+
+    try:
+        news = ticker.get_news()
+        return {
+            "symbol": symbol,
+            "articles": news,
+            "count": len(news) if news else 0,
+        }
+    except Exception as e:
+        return {
+            "symbol": symbol,
+            "error": str(e),
+            "articles": [],
+            "count": 0,
+        }
+
+
+def format_news(data: dict[str, Any]) -> str:
+    """Format news() screen - BBG Lite style with summaries and URLs"""
+    symbol = data["symbol"]
+
+    if data.get("error"):
+        return f"ERROR fetching news for {symbol}: {data['error']}"
+
+    articles = data.get("articles", [])
+    count = data.get("count", 0)
+
+    if count == 0:
+        return f"No news articles found for {symbol}"
+
+    now = datetime.now(ZoneInfo("America/New_York"))
+    date_str = now.strftime("%Y-%m-%d")
+    time_str = now.strftime("%H:%M %Z")
+
+    lines = []
+    lines.append(f"NEWS {symbol} | {count} articles as of {date_str} {time_str}")
+    lines.append("")
+
+    # Format each article
+    for article in articles:
+        content = article.get("content", {})
+
+        # Parse pub date
+        pub_date_str = content.get("pubDate", "")
+        try:
+            pub_date = datetime.fromisoformat(pub_date_str.replace("Z", "+00:00"))
+            pub_date_formatted = pub_date.strftime("[%Y-%m-%d %H:%M]")
+        except Exception:
+            pub_date_formatted = "[Unknown date]"
+
+        title = content.get("title", "No title")
+        summary = content.get("summary", "")
+        provider = content.get("provider", {}).get("displayName", "Unknown source")
+        url = content.get("canonicalUrl", {}).get("url", "")
+
+        # Format article
+        lines.append(f"{pub_date_formatted} {title}")
+        if summary:
+            # Wrap summary at ~80 chars
+            words = summary.split()
+            current_line = "  "
+            for word in words:
+                if len(current_line) + len(word) + 1 > 78:
+                    lines.append(current_line)
+                    current_line = "  " + word
+                else:
+                    current_line += (" " if current_line != "  " else "") + word
+            if current_line.strip():
+                lines.append(current_line)
+
+        lines.append(f"  Source: {provider}")
+        if url:
+            lines.append(f"  Read: {url}")
+        lines.append("")  # Blank line between articles
+
+    # Footer
+    lines.append(f"Data as of {date_str} {time_str} | Source: yfinance")
 
     return "\n".join(lines)
