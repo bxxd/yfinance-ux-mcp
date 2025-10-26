@@ -162,11 +162,54 @@ Or manually:
 
 **Note:** For claude CLI users, MCP servers are configured per-project in `~/.claude.json`. Other MCP clients may have different configuration methods.
 
+**Method 3: SSE/HTTP Server (for web-based deployments)**
+
+For web interfaces or when you need a persistent HTTP server:
+
+```bash
+# Start HTTP server (runs in background on port 5001)
+make server
+
+# Or specify custom port
+PORT=8080 make server
+
+# Check logs
+make logs
+```
+
+Configure Claude Code to use SSE transport:
+
+```json
+{
+  "projects": {
+    "/path/to/your/project": {
+      "mcpServers": {
+        "yfinance-ux": {
+          "type": "sse",
+          "url": "http://127.0.0.1:5001/sse"
+        }
+      }
+    }
+  }
+}
+```
+
+**When to use SSE:**
+- Web-based Claude Code deployments (e.g., browser terminals)
+- Multiple clients sharing one server instance
+- Debugging without restarting Claude Code
+
+**When to use stdio:**
+- Local CLI usage (standard approach)
+- Single-user development environment
+
 ### 3. Restart MCP Client
 
 After configuration, restart your MCP client to load the server.
 
-**How it works:** The MCP client launches the server as a subprocess and communicates via stdin/stdout. All processing happens locally on your machine.
+**How it works:**
+- **stdio mode:** MCP client launches server as subprocess, communicates via stdin/stdout
+- **SSE mode:** MCP client connects to persistent HTTP server via Server-Sent Events
 
 ## Usage
 
