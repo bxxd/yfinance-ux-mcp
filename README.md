@@ -6,6 +6,35 @@ Market data tools for idiosyncratic alpha analysis. Powered by yfinance.
 
 Provides fast access to market snapshots, price data, and historical analysis.
 
+## Example Output
+
+**Our differentiator: BBG Lite formatted, agent-friendly screens**
+
+```
+MARKETS | Sun 2025-10-26 12:42 EDT
+
+US EQUITIES                   PRICE     CHANGE       1M         1Y
+S&P 500                      6791.69    +0.79%     +2.2%     +16.9%
+Nasdaq                      23204.87    +1.15%     +3.2%     +25.3%
+Dow                         47207.12    +1.01%     +2.1%     +12.1%
+Russell 2000                 2513.47    +1.24%     +3.3%     +13.8%
+
+SECTORS          TICKER      PRICE     CHANGE       1M         1Y
+Technology       XLK          293.58    +1.23%     +5.3%     +28.3%
+Financials       XLF           53.11    +0.84%     -1.4%     +15.6%
+Healthcare       XLV          146.03    -0.05%     +7.8%      +0.0%
+Energy           XLE           88.07    -1.01%     -4.3%      +1.4%
+[... all 11 GICS sectors]
+
+COMMODITIES                   PRICE     CHANGE       1M         1Y
+Gold                         4137.80    +0.05%     +9.6%     +51.0%
+Oil WTI                        61.50    +0.10%     -6.4%     -14.3%
+
+Data as of 2025-10-26 12:42 EDT | Source: yfinance
+```
+
+Dense, scannable, professional. Not raw JSON - formatted for humans, AI benefits automatically.
+
 ## Features
 
 **Bloomberg Terminal-style navigation screens for market data:**

@@ -970,6 +970,14 @@ def get_ticker_screen_data(symbol: str) -> dict[str, Any]:
         except Exception:
             pass  # Calendar not available for non-stocks (indices, ETFs, etc.)
 
+        # Get news (5 most recent for preview)
+        news_preview = []
+        try:
+            news = ticker.get_news()
+            news_preview = news[:5] if news else []  # First 5 articles
+        except Exception:
+            pass
+
         return {
             "symbol": symbol,
             "name": name,
@@ -992,6 +1000,7 @@ def get_ticker_screen_data(symbol: str) -> dict[str, Any]:
             "total_vol": vol_data.get("total_vol"),
             "rsi": rsi,
             "calendar": calendar,
+            "news_preview": news_preview,
         }
     except Exception as e:
         return {"symbol": symbol, "error": str(e)}
@@ -1055,6 +1064,14 @@ def get_ticker_screen_data_batch(symbols: list[str]) -> list[dict[str, Any]]:
             except Exception:
                 pass  # Calendar not available for non-stocks (indices, ETFs, etc.)
 
+            # Get news (5 most recent for preview)
+            news_preview = []
+            try:
+                news = ticker_obj.get_news()
+                news_preview = news[:5] if news else []  # First 5 articles
+            except Exception:
+                pass
+
             results.append({
                 "symbol": symbol,
                 "name": name,
@@ -1077,6 +1094,7 @@ def get_ticker_screen_data_batch(symbols: list[str]) -> list[dict[str, Any]]:
                 "total_vol": vol_data.get("total_vol"),
                 "rsi": rsi,
                 "calendar": calendar,
+                "news_preview": news_preview,
             })
         except Exception as e:
             results.append({"symbol": symbol, "error": str(e)})
@@ -1243,6 +1261,30 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
         lines.append(f"Current          {price:7.2f}  [{bar}]  {range_pct:.0f}% of range")
         lines.append("")
 
+    # News preview (5 most recent headlines)
+    news_preview = data.get("news_preview", [])
+    if news_preview:
+        total_count = len(news_preview)
+        lines.append(f"RECENT NEWS ({total_count} of 10+ articles, see all: news('{symbol}'))")
+        for article in news_preview[:5]:  # Show max 5
+            content = article.get("content", {})
+            # Parse pub date
+            pub_date_str = content.get("pubDate", "")
+            try:
+                pub_date = datetime.fromisoformat(pub_date_str.replace("Z", "+00:00"))
+                date_formatted = pub_date.strftime("[%m-%d]")
+            except Exception:
+                date_formatted = "[??-??]"
+
+            title = content.get("title", "No title")
+            provider = content.get("provider", {}).get("displayName", "Unknown")
+            # Truncate title if too long
+            max_title_len = 70
+            if len(title) > max_title_len:
+                title = title[:max_title_len-3] + "..."
+            lines.append(f"{date_formatted} {title} ({provider})")
+        lines.append("")
+
     # Footer
     lines.append(f"Data as of {date_str} {time_str} | Source: yfinance")
 
@@ -1391,5 +1433,89 @@ def format_market_snapshot(data: dict[str, dict[str, Any]]) -> str:  # noqa: PLR
         "Try: symbol='TSLA' for ticker | categories=['europe'] for regions | "
         "period='3mo' for history"
     )
+
+    return "\n".join(lines)
+
+
+def get_news_data(symbol: str) -> dict[str, Any]:
+    """Fetch news articles for a ticker symbol"""
+    ticker = yf.Ticker(symbol)
+
+    try:
+        news = ticker.get_news()
+        return {
+            "symbol": symbol,
+            "articles": news,
+            "count": len(news) if news else 0,
+        }
+    except Exception as e:
+        return {
+            "symbol": symbol,
+            "error": str(e),
+            "articles": [],
+            "count": 0,
+        }
+
+
+def format_news(data: dict[str, Any]) -> str:
+    """Format news() screen - BBG Lite style with summaries and URLs"""
+    symbol = data["symbol"]
+
+    if data.get("error"):
+        return f"ERROR fetching news for {symbol}: {data['error']}"
+
+    articles = data.get("articles", [])
+    count = data.get("count", 0)
+
+    if count == 0:
+        return f"No news articles found for {symbol}"
+
+    now = datetime.now(ZoneInfo("America/New_York"))
+    date_str = now.strftime("%Y-%m-%d")
+    time_str = now.strftime("%H:%M %Z")
+
+    lines = []
+    lines.append(f"NEWS {symbol} | {count} articles as of {date_str} {time_str}")
+    lines.append("")
+
+    # Format each article
+    for article in articles:
+        content = article.get("content", {})
+
+        # Parse pub date
+        pub_date_str = content.get("pubDate", "")
+        try:
+            pub_date = datetime.fromisoformat(pub_date_str.replace("Z", "+00:00"))
+            pub_date_formatted = pub_date.strftime("[%Y-%m-%d %H:%M]")
+        except Exception:
+            pub_date_formatted = "[Unknown date]"
+
+        title = content.get("title", "No title")
+        summary = content.get("summary", "")
+        provider = content.get("provider", {}).get("displayName", "Unknown source")
+        url = content.get("canonicalUrl", {}).get("url", "")
+
+        # Format article
+        lines.append(f"{pub_date_formatted} {title}")
+        if summary:
+            # Wrap summary at ~80 chars
+            words = summary.split()
+            current_line = "  "
+            for word in words:
+                if len(current_line) + len(word) + 1 > 78:
+                    lines.append(current_line)
+                    current_line = "  " + word
+                else:
+                    current_line += (" " if current_line != "  " else "") + word
+            if current_line.strip():
+                lines.append(current_line)
+
+        lines.append(f"  Source: {provider}")
+        if url:
+            lines.append(f"  Read: {url}")
+        lines.append("")  # Blank line between articles
+
+    # Footer
+    lines.append(f"Data as of {date_str} {time_str} | Source: yfinance")
 
     return "\n".join(lines)

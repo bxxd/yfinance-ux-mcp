@@ -8,6 +8,7 @@ Usage:
   ./cli sector technology    # Sector drill-down screen
   ./cli ticker TSLA          # Individual ticker screen (detailed)
   ./cli ticker TSLA F GM     # Batch comparison (table format)
+  ./cli news TSLA            # News screen for a ticker
 
 Fast iteration: Calls market_data.py functions directly (no MCP layer)
 """
@@ -19,10 +20,12 @@ import sys
 
 from .market_data import (
     format_markets,
+    format_news,
     format_sector,
     format_ticker,
     format_ticker_batch,
     get_markets_data,
+    get_news_data,
     get_sector_data,
     get_ticker_screen_data,
 )
@@ -83,6 +86,14 @@ def ticker_command(symbols: list[str]) -> int:
     return 0
 
 
+def news_command(symbol: str) -> int:
+    """Show news() screen"""
+    data = get_news_data(symbol)
+    output = format_news(data)
+    print(output)
+    return 0
+
+
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(
@@ -95,6 +106,7 @@ Examples:
   %(prog)s sector technology
   %(prog)s ticker TSLA                # Single ticker (detailed)
   %(prog)s ticker TSLA F GM           # Batch comparison (table)
+  %(prog)s news TSLA                  # News for ticker
         """
     )
 
@@ -118,6 +130,10 @@ Examples:
         "symbols", nargs="+", help="Ticker symbol(s) (e.g., TSLA or TSLA F GM)"
     )
 
+    # news command
+    news_parser = subparsers.add_parser("news", help="News screen for a ticker")
+    news_parser.add_argument("symbol", help="Ticker symbol (e.g., TSLA)")
+
     return parser.parse_args()
 
 
@@ -140,6 +156,9 @@ async def async_main() -> int:
 
     if args.command == "ticker":
         return ticker_command(args.symbols)
+
+    if args.command == "news":
+        return news_command(args.symbol)
 
     print(f"Unknown command: {args.command}")
     return 1
