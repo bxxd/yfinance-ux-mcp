@@ -30,6 +30,21 @@ BETA_LOW_THRESHOLD = 0.8
 IDIO_VOL_HIGH_THRESHOLD = 30
 IDIO_VOL_LOW_THRESHOLD = 15
 
+
+def normalize_ticker_symbol(symbol: str) -> str:
+    """
+    Normalize ticker symbol to Yahoo Finance format.
+
+    Yahoo Finance uses hyphens (-) for share classes and special securities:
+    - BRK.B or BRK/B → BRK-B (Berkshire Hathaway Class B)
+    - BRK.A or BRK/A → BRK-A (Berkshire Hathaway Class A)
+    - BAC.PL or BAC/PL → BAC-PL (Preferred stock)
+
+    Other providers use periods or slashes, but Yahoo standardized on hyphens.
+    Period (.) is reserved for international exchanges (e.g., 0700.HK for Hong Kong).
+    """
+    return symbol.replace(".", "-").replace("/", "-")
+
 # Category to symbol mappings (for get_market_snapshot)
 # Aligned with Paleologo factor framework
 CATEGORY_MAPPING: dict[str, list[str]] = {
@@ -930,6 +945,7 @@ def format_sector(data: dict[str, Any]) -> str:
 def get_ticker_screen_data(symbol: str) -> dict[str, Any]:
     """Fetch comprehensive ticker data for ticker() screen"""
     try:
+        symbol = normalize_ticker_symbol(symbol)
         ticker = yf.Ticker(symbol)
         info = ticker.info
 
@@ -1022,6 +1038,9 @@ def get_ticker_screen_data_batch(symbols: list[str]) -> list[dict[str, Any]]:
     """Fetch comprehensive ticker data for multiple symbols using batch API"""
     if not symbols:
         return []
+
+    # Normalize all symbols
+    symbols = [normalize_ticker_symbol(s) for s in symbols]
 
     # Batch fetch all tickers at once (single request to Yahoo, not N separate requests)
     tickers_obj = yf.Tickers(" ".join(symbols))
@@ -1531,6 +1550,7 @@ def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]
     Returns:
         dict with options positioning, IV structure, term structure
     """
+    symbol = normalize_ticker_symbol(symbol)
     try:
         ticker = yf.Ticker(symbol)
 
