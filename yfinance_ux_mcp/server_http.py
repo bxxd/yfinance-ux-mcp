@@ -25,13 +25,11 @@ from starlette.routing import Mount, Route
 
 from .market_data import (
     format_markets,
-    format_news,
     format_options,
     format_sector,
     format_ticker,
     format_ticker_batch,
     get_markets_data,
-    get_news_data,
     get_options_data,
     get_sector_data,
     get_ticker_screen_data,
@@ -110,16 +108,6 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:  # noqa: AN
         data = get_ticker_screen_data(symbol)
         formatted = format_ticker(data)
         print(f"[MCP-SERVER] ticker({symbol}) returning {len(formatted)} chars", flush=True)
-        return [TextContent(type="text", text=formatted)]
-
-    if name == "ticker_news":
-        symbol = arguments.get("symbol")
-        if not symbol:
-            msg = "ticker_news() requires 'symbol' parameter"
-            raise ValueError(msg)
-        data = get_news_data(symbol)
-        formatted = format_news(data)
-        print(f"[MCP-SERVER] ticker_news({symbol}) returning {len(formatted)} chars", flush=True)
         return [TextContent(type="text", text=formatted)]
 
     if name == "ticker_options":

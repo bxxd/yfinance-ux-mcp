@@ -16,7 +16,6 @@ make logs       # Tail server logs
 ./cli sector technology    # Test sector drill-down
 ./cli ticker TSLA          # Test single ticker
 ./cli ticker TSLA F GM     # Test batch comparison (space-separated)
-./cli news TSLA            # Test news
 ./cli options PALL         # Test options analysis
 ```
 
@@ -39,11 +38,10 @@ make logs       # Tail server logs
 - Both servers automatically get the same tool set
 - Test: `./cli list-tools` and check alpha-server connections
 
-## Tools (5 Screens)
+## Tools (4 Screens)
 
 **Hierarchical naming:** Tools use `ticker_*` prefix to show relationship:
 - `ticker()` - Main security screen
-- `ticker_news()` - News tab/drill-down for a ticker
 - `ticker_options()` - Options tab/drill-down for a ticker
 
 **Why this matters:** Prevents confusion (e.g., "options" could mean settings/config). Makes hierarchy explicit for UI design (tabs in alpha-server).
@@ -77,7 +75,7 @@ Shows:
 
 Parameters: `symbol` as string or array
 
-**Single mode** (`'TSLA'`): Full analysis with factor exposures, valuation, technicals, calendar, news preview
+**Single mode** (`'TSLA'`): Full analysis with factor exposures, valuation, technicals, calendar, options
 
 **Batch mode** (`['TSLA', 'F', 'GM']`): Side-by-side comparison table
 
@@ -85,22 +83,9 @@ Displays:
 - Factor exposures (Beta SPX, Idio Vol, Total Vol)
 - Valuation (P/E, Forward P/E, Dividend Yield)
 - Calendar (Earnings, Ex-Div, Div Payment)
-- Momentum & Technicals (1M, 1Y, 50-day MA, 200-day MA, RSI)
+- Momentum & Technicals (1W, 1M, 1Y, 50-day MA, 200-day MA, RSI)
 - 52-week range with visual bar
-- News preview (5 most recent headlines)
-
-### ticker_news(symbol)
-**Recent articles for a ticker**
-
-Parameters: `symbol` (e.g., 'TSLA')
-
-Shows all available articles (~10) with:
-- Full headlines and timestamps
-- Article summaries (wrapped at 80 chars)
-- Source attribution
-- URLs for full articles
-
-**Navigation:** Used from ticker() news preview, or directly for full article list.
+- Options Analysis (P/C ratio, top strikes, IV structure, vol skew, term structure, interpretation)
 
 ### ticker_options(symbol, expiration='nearest')
 **Options chain analysis - positioning and IV structure**
@@ -134,10 +119,9 @@ Each screen = one question answered:
 - markets() = "What's the market doing?"
 - sector('technology') = "How's this sector performing?"
 - ticker('TSLA') = "Tell me about this stock?"
-- ticker_news('TSLA') = "What's the recent news?" (tab/drill-down from ticker)
 - ticker_options('PALL') = "What's the options positioning?" (tab/drill-down from ticker)
 
-**Tab structure:** ticker() is the main screen, with ticker_news() and ticker_options() as tabs/drill-downs. This matches the intended alpha-server UI design (ticker page with Overview | News | Options tabs).
+**Tab structure:** ticker() is the main screen, with ticker_options() as a tab/drill-down. This matches the intended alpha-server UI design (ticker page with Overview | Options tabs).
 
 ### 4. Human-Readable Output
 BBG Lite formatted text (dense, scannable, professional). Not JSON. Claude reads it directly.
@@ -153,17 +137,18 @@ make all  # Must pass before committing
 
 **fast_info instead of ticker.info** - Much faster for price/change data (markets, sector screens)
 
-**Narrow window momentum** - Fetch ~15 days vs 252 days (94% reduction)
+**Narrow window momentum** - Fetch ~22 days vs 252 days (91% reduction)
 ```python
 # Current price from fast_info (no fetch)
 current_price = ticker.fast_info.get("lastPrice")
 
-# Narrow windows around exact dates (365 days, 30 days ago)
-price_1y_ago = fetch_price_at_date(symbol, date_1y_ago)
+# Narrow windows around exact dates (7 days, 30 days, 365 days ago)
+price_1w_ago = fetch_price_at_date(symbol, date_1w_ago)
 price_1m_ago = fetch_price_at_date(symbol, date_1m_ago)
+price_1y_ago = fetch_price_at_date(symbol, date_1y_ago)
 
 # Calculate momentum (precise calendar lookback)
-momentum_1y = ((current_price - price_1y_ago) / price_1y_ago * 100)
+momentum_1w = ((current_price - price_1w_ago) / price_1w_ago * 100)
 ```
 
 **Parallel fetching** - ThreadPoolExecutor for concurrent API calls (markets, sector holdings)
@@ -175,21 +160,19 @@ momentum_1y = ((current_price - price_1y_ago) / price_1y_ago * 100)
 **Screen data fetchers:**
 - `get_markets_data()` → Fetch all market data
 - `get_sector_data(name)` → Fetch sector ETF + holdings
-- `get_ticker_screen_data(symbol)` → Fetch comprehensive ticker data
+- `get_ticker_screen_data(symbol)` → Fetch comprehensive ticker data (includes options)
 - `get_ticker_screen_data_batch(symbols)` → Batch fetch for comparison
-- `get_news_data(symbol)` → Fetch news articles
 - `get_options_data(symbol, expiration)` → Fetch options chain
 
 **Screen formatters (BBG Lite):**
 - `format_markets(data)` → Market overview screen
 - `format_sector(data)` → Sector drill-down screen
-- `format_ticker(data)` → Single ticker screen
+- `format_ticker(data)` → Single ticker screen (includes options analysis)
 - `format_ticker_batch(data_list)` → Batch comparison screen
-- `format_news(data)` → News screen
 - `format_options(data)` → Options analysis screen
 
 **Calculations:**
-- `calculate_momentum(symbol)` → 1M, 1Y trailing returns (optimized)
+- `calculate_momentum(symbol)` → 1W, 1M, 1Y trailing returns (optimized)
 - `calculate_idio_vol(symbol)` → Idiosyncratic volatility (parallel fetch)
 - `calculate_rsi(prices, period=14)` → RSI calculation
 - `is_market_open()` → US market hours detection
@@ -203,19 +186,17 @@ momentum_1y = ((current_price - price_1y_ago) / price_1y_ago * 100)
 ./cli sector technology
 ./cli ticker TSLA
 ./cli ticker TSLA F GM     # Batch mode (space-separated)
-./cli news TSLA            # CLI still uses short name
 ./cli options PALL
 ```
 
 **MCP (after Claude Code restart):**
 ```python
-mcp__idio-yf__markets()
-mcp__idio-yf__sector(name='technology')
-mcp__idio-yf__ticker(symbol='TSLA')
-mcp__idio-yf__ticker(symbol=['TSLA', 'F', 'GM'])  # Batch
-mcp__idio-yf__ticker_news(symbol='TSLA')
-mcp__idio-yf__ticker_options(symbol='PALL')
-mcp__idio-yf__ticker_options(symbol='PALL', expiration='2025-12-20')
+mcp__yfinance-ux__markets()
+mcp__yfinance-ux__sector(name='technology')
+mcp__yfinance-ux__ticker(symbol='TSLA')
+mcp__yfinance-ux__ticker(symbol=['TSLA', 'F', 'GM'])  # Batch
+mcp__yfinance-ux__ticker_options(symbol='PALL')
+mcp__yfinance-ux__ticker_options(symbol='PALL', expiration='2025-12-20')
 ```
 
 **Unit tests:**
@@ -288,11 +269,10 @@ No extras. Keep it minimal.
 
 ## Summary
 
-**5 screen-based tools** for systematic capital allocation:
+**4 screen-based tools** for systematic capital allocation:
 - markets() - Complete factor landscape
 - sector() - Sector drill-down
 - ticker() - Individual security (single + batch comparison)
-- ticker_news() - Recent articles (tab/drill-down)
 - ticker_options() - Positioning and IV analysis (tab/drill-down)
 
 **BBG Lite output** - Dense, scannable, professional formatting

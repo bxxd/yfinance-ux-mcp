@@ -123,12 +123,6 @@ High              488.54
 Low               214.25
 Current           460.55  [=================░░░]  90% of range
 
-RECENT NEWS (5 of 10+ articles, see all: ticker_news('TSLA'))
-[10-28] Nvidia, Lucid team up for true autonomous driving in future vehicles
-[10-27] Tesla 'may lose' Elon Musk if shareholders don't approve $1 trillion...
-[10-29] Dow Jones, S&P 500 Hit Highs; Why Microsoft, Google, Meta Earnings ...
-
-For full news: ticker_news('TSLA')
 For options analysis: ticker_options('TSLA')
 
 Output: BBG Lite formatted text (dense, scannable, professional).
@@ -145,36 +139,6 @@ Output: BBG Lite formatted text (dense, scannable, professional).
                             "Ticker symbol or list of symbols "
                             "(e.g., 'TSLA' or ['TSLA', 'F', 'GM'])"
                         ),
-                    }
-                },
-                "required": ["symbol"]
-            }
-        ),
-        Tool(
-            name="ticker_news",
-            description="""
-News screen - recent articles for a ticker.
-
-Shows:
-- All available news articles (typically 10)
-- Full headlines with timestamps
-- Article summaries (1-2 sentences)
-- Source attribution (Yahoo Finance, Reuters, Bloomberg, etc.)
-- Read URLs for full articles
-
-Input: symbol as string (e.g., 'TSLA')
-
-Output: BBG Lite formatted text with progressive disclosure.
-
-Navigation: Back to ticker('TSLA') for price/factor data
-Related: ticker_options('TSLA') for options analysis
-""",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "symbol": {
-                        "type": "string",
-                        "description": "Ticker symbol (e.g., 'TSLA', 'AAPL')",
                     }
                 },
                 "required": ["symbol"]
@@ -238,7 +202,6 @@ Output: BBG Lite formatted text (dense, scannable, professional).
 Context delivery system - NO recommendations.
 
 Navigation: Back to ticker('PALL') for price/factor data
-Related: ticker_news('PALL') for recent articles
 """,
             inputSchema={
                 "type": "object",

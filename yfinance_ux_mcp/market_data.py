@@ -311,10 +311,10 @@ def get_market_status(region: str) -> str:
 
 def calculate_momentum(symbol: str) -> dict[str, float | None]:
     """
-    Calculate trailing returns (1M, 1Y) for momentum analysis
+    Calculate trailing returns (1W, 1M, 1Y) for momentum analysis
 
     Uses fast_info for current price + narrow window fetches for precise lookback dates
-    Fetches ~15 days total vs 252 days (94% reduction)
+    Fetches ~22 days total vs 252 days (91% reduction)
     """
     try:
         ticker = yf.Ticker(symbol)
@@ -322,16 +322,18 @@ def calculate_momentum(symbol: str) -> dict[str, float | None]:
         # Get current price from fast_info (no fetch!)
         current_price = ticker.fast_info.get("lastPrice")
         if current_price is None:
-            return {"momentum_1m": None, "momentum_1y": None}
+            return {"momentum_1w": None, "momentum_1m": None, "momentum_1y": None}
 
         # Calculate target dates for precise lookback
         now = datetime.now(ZoneInfo("America/New_York"))
         date_1y_ago = now - timedelta(days=365)
         date_1m_ago = now - timedelta(days=30)
+        date_1w_ago = now - timedelta(days=7)
 
         # Fetch prices at specific dates (narrow windows, ~7-8 days each)
         price_1y_ago = fetch_price_at_date(symbol, date_1y_ago)
         price_1m_ago = fetch_price_at_date(symbol, date_1m_ago)
+        price_1w_ago = fetch_price_at_date(symbol, date_1w_ago)
 
         # Calculate momentum
         momentum_1y = (
@@ -342,13 +344,18 @@ def calculate_momentum(symbol: str) -> dict[str, float | None]:
             ((current_price - price_1m_ago) / price_1m_ago * 100)
             if price_1m_ago else None
         )
+        momentum_1w = (
+            ((current_price - price_1w_ago) / price_1w_ago * 100)
+            if price_1w_ago else None
+        )
 
         return {
+            "momentum_1w": momentum_1w,
             "momentum_1m": momentum_1m,
             "momentum_1y": momentum_1y,
         }
     except Exception:
-        return {"momentum_1m": None, "momentum_1y": None}
+        return {"momentum_1w": None, "momentum_1m": None, "momentum_1y": None}
 
 
 def calculate_rsi(prices: Any, period: int = RSI_PERIOD) -> float | None:  # noqa: ANN401
@@ -978,6 +985,9 @@ def get_ticker_screen_data(symbol: str) -> dict[str, Any]:
         except Exception:
             pass
 
+        # Get options data
+        options_data = get_options_data(symbol, "nearest")
+
         return {
             "symbol": symbol,
             "name": name,
@@ -994,6 +1004,7 @@ def get_ticker_screen_data(symbol: str) -> dict[str, Any]:
             "two_hundred_day_avg": two_hundred_day_avg,
             "fifty_two_week_high": fifty_two_week_high,
             "fifty_two_week_low": fifty_two_week_low,
+            "momentum_1w": momentum.get("momentum_1w"),
             "momentum_1m": momentum.get("momentum_1m"),
             "momentum_1y": momentum.get("momentum_1y"),
             "idio_vol": vol_data.get("idio_vol"),
@@ -1001,6 +1012,7 @@ def get_ticker_screen_data(symbol: str) -> dict[str, Any]:
             "rsi": rsi,
             "calendar": calendar,
             "news_preview": news_preview,
+            "options_data": options_data,
         }
     except Exception as e:
         return {"symbol": symbol, "error": str(e)}
@@ -1220,8 +1232,11 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
 
     # Momentum & Technicals
     lines.append("MOMENTUM & TECHNICALS")
+    mom_1w = data.get("momentum_1w")
     mom_1m = data.get("momentum_1m")
     mom_1y = data.get("momentum_1y")
+    if mom_1w is not None:
+        lines.append(f"1-Week           {mom_1w:+6.1f}%")
     if mom_1m is not None:
         lines.append(f"1-Month          {mom_1m:+6.1f}%")
     if mom_1y is not None:
@@ -1261,31 +1276,21 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
         lines.append(f"Current          {price:7.2f}  [{bar}]  {range_pct:.0f}% of range")
         lines.append("")
 
-    # News preview (5 most recent headlines)
-    news_preview = data.get("news_preview", [])
-    if news_preview:
-        total_count = len(news_preview)
-        lines.append(f"RECENT NEWS ({total_count} of 10+ articles, see all: news('{symbol}'))")
-        for article in news_preview[:5]:  # Show max 5
-            content = article.get("content", {})
-            # Parse pub date
-            pub_date_str = content.get("pubDate", "")
-            try:
-                pub_date = datetime.fromisoformat(pub_date_str.replace("Z", "+00:00"))
-                date_formatted = pub_date.strftime("[%m-%d]")
-            except Exception:
-                date_formatted = "[??-??]"
-
-            title = content.get("title", "No title")
-            provider = content.get("provider", {}).get("displayName", "Unknown")
-            # Truncate title if too long
-            max_title_len = 70
-            if len(title) > max_title_len:
-                title = title[:max_title_len-3] + "..."
-            lines.append(f"{date_formatted} {title} ({provider})")
-        lines.append("")
+    # Options Analysis (append full section)
+    options_data = data.get("options_data")
+    if options_data and not options_data.get("error"):
+        # Format the full options section
+        options_formatted = format_options(options_data)
+        # Extract core content: skip header (first 3 lines) and footer (last 2 lines)
+        options_lines = options_formatted.split("\n")
+        # Skip first 3 lines (header) and last 2 lines (footer)
+        core_options = options_lines[3:-2]
+        # Prepend with OPTIONS ANALYSIS header
+        lines.append("OPTIONS ANALYSIS")
+        lines.extend(core_options)
 
     # Footer
+    lines.append("")
     lines.append(f"Data as of {date_str} {time_str} | Source: yfinance")
 
     return "\n".join(lines)
