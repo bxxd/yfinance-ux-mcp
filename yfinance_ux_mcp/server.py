@@ -146,13 +146,13 @@ High              488.54
 Low               214.25
 Current           460.55  [=================░░░]  90% of range
 
-RECENT NEWS (5 of 10+ articles, see all: news('TSLA'))
+RECENT NEWS (5 of 10+ articles, see all: ticker_news('TSLA'))
 [10-28] Nvidia, Lucid team up for true autonomous driving in future vehicles
 [10-27] Tesla 'may lose' Elon Musk if shareholders don't approve $1 trillion...
 [10-29] Dow Jones, S&P 500 Hit Highs; Why Microsoft, Google, Meta Earnings ...
 
-For full news: news('TSLA')
-For options analysis: options('TSLA')
+For full news: ticker_news('TSLA')
+For options analysis: ticker_options('TSLA')
 
 Output: BBG Lite formatted text (dense, scannable, professional).
 """,
@@ -174,7 +174,7 @@ Output: BBG Lite formatted text (dense, scannable, professional).
             }
         ),
         Tool(
-            name="news",
+            name="ticker_news",
             description="""
 News screen - recent articles for a ticker.
 
@@ -190,6 +190,7 @@ Input: symbol as string (e.g., 'TSLA')
 Output: BBG Lite formatted text with progressive disclosure.
 
 Navigation: Back to ticker('TSLA') for price/factor data
+Related: ticker_options('TSLA') for options analysis
 """,
             inputSchema={
                 "type": "object",
@@ -203,7 +204,7 @@ Navigation: Back to ticker('TSLA') for price/factor data
             }
         ),
         Tool(
-            name="options",
+            name="ticker_options",
             description="""
 Options chain analysis screen - positioning, IV structure, vol skew, term structure.
 
@@ -219,7 +220,7 @@ Input:
 - symbol: Ticker symbol (e.g., 'PALL', 'AAPL')
 - expiration (optional): 'nearest' (default) or specific date like '2025-12-20'
 
-Example output for options('PALL'):
+Example output for ticker_options('PALL'):
 
 PALL US EQUITY                          OPTIONS ANALYSIS
 Last: $127.88                          Exp: 2025-11-21 (23d)  |  ATM: $130
@@ -260,6 +261,7 @@ Output: BBG Lite formatted text (dense, scannable, professional).
 Context delivery system - NO recommendations.
 
 Navigation: Back to ticker('PALL') for price/factor data
+Related: ticker_news('PALL') for recent articles
 """,
             inputSchema={
                 "type": "object",
@@ -315,19 +317,19 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:  # noqa: AN
         formatted = format_ticker(data)
         return [TextContent(type="text", text=formatted)]
 
-    if name == "news":
+    if name == "ticker_news":
         symbol = arguments.get("symbol")
         if not symbol:
-            msg = "news() requires 'symbol' parameter"
+            msg = "ticker_news() requires 'symbol' parameter"
             raise ValueError(msg)
         data = get_news_data(symbol)
         formatted = format_news(data)
         return [TextContent(type="text", text=formatted)]
 
-    if name == "options":
+    if name == "ticker_options":
         symbol = arguments.get("symbol")
         if not symbol:
-            msg = "options() requires 'symbol' parameter"
+            msg = "ticker_options() requires 'symbol' parameter"
             raise ValueError(msg)
         expiration = arguments.get("expiration", "nearest")
         data = get_options_data(symbol, expiration)

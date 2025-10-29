@@ -9,6 +9,8 @@ Usage:
   ./cli ticker TSLA          # Individual ticker screen (detailed)
   ./cli ticker TSLA F GM     # Batch comparison (table format)
   ./cli news TSLA            # News screen for a ticker
+  ./cli options PALL         # Options chain analysis (nearest expiration)
+  ./cli options PALL 2025-12-20  # Options for specific expiration
 
 Fast iteration: Calls market_data.py functions directly (no MCP layer)
 """
@@ -21,11 +23,13 @@ import sys
 from .market_data import (
     format_markets,
     format_news,
+    format_options,
     format_sector,
     format_ticker,
     format_ticker_batch,
     get_markets_data,
     get_news_data,
+    get_options_data,
     get_sector_data,
     get_ticker_screen_data,
 )
@@ -94,6 +98,14 @@ def news_command(symbol: str) -> int:
     return 0
 
 
+def options_command(symbol: str, expiration: str = "nearest") -> int:
+    """Show options() screen"""
+    data = get_options_data(symbol, expiration)
+    output = format_options(data)
+    print(output)
+    return 0
+
+
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(
@@ -134,10 +146,20 @@ Examples:
     news_parser = subparsers.add_parser("news", help="News screen for a ticker")
     news_parser.add_argument("symbol", help="Ticker symbol (e.g., TSLA)")
 
+    # options command
+    options_parser = subparsers.add_parser("options", help="Options chain analysis")
+    options_parser.add_argument("symbol", help="Ticker symbol (e.g., PALL)")
+    options_parser.add_argument(
+        "expiration",
+        nargs="?",
+        default="nearest",
+        help="Expiration date (default: nearest, or YYYY-MM-DD)",
+    )
+
     return parser.parse_args()
 
 
-async def async_main() -> int:
+async def async_main() -> int:  # noqa: PLR0911
     args = parse_args()
 
     if not args.command:
@@ -159,6 +181,9 @@ async def async_main() -> int:
 
     if args.command == "news":
         return news_command(args.symbol)
+
+    if args.command == "options":
+        return options_command(args.symbol, args.expiration)
 
     print(f"Unknown command: {args.command}")
     return 1

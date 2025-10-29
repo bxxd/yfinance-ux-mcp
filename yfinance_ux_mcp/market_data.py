@@ -971,7 +971,7 @@ def get_ticker_screen_data(symbol: str) -> dict[str, Any]:
             pass  # Calendar not available for non-stocks (indices, ETFs, etc.)
 
         # Get news (5 most recent for preview)
-        news_preview = []
+        news_preview: list[Any] = []
         try:
             news = ticker.get_news()
             news_preview = news[:5] if news else []  # First 5 articles
@@ -1065,7 +1065,7 @@ def get_ticker_screen_data_batch(symbols: list[str]) -> list[dict[str, Any]]:
                 pass  # Calendar not available for non-stocks (indices, ETFs, etc.)
 
             # Get news (5 most recent for preview)
-            news_preview = []
+            news_preview: list[Any] = []
             try:
                 news = ticker_obj.get_news()
                 news_preview = news[:5] if news else []  # First 5 articles
@@ -1502,7 +1502,7 @@ def format_news(data: dict[str, Any]) -> str:
             words = summary.split()
             current_line = "  "
             for word in words:
-                if len(current_line) + len(word) + 1 > 78:
+                if len(current_line) + len(word) + 1 > 78:  # noqa: PLR2004
                     lines.append(current_line)
                     current_line = "  " + word
                 else:
@@ -1517,5 +1517,348 @@ def format_news(data: dict[str, Any]) -> str:
 
     # Footer
     lines.append(f"Data as of {date_str} {time_str} | Source: yfinance")
+
+    return "\n".join(lines)
+
+
+def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]:
+    """
+    Fetch options chain data for a symbol.
+
+    Args:
+        symbol: Ticker symbol (e.g., 'PALL', 'AAPL')
+        expiration: 'nearest' or specific date like '2025-11-21'
+
+    Returns:
+        dict with options positioning, IV structure, term structure
+    """
+    try:
+        ticker = yf.Ticker(symbol)
+
+        # Get available expiration dates
+        expirations = ticker.options  # List of date strings
+        if not expirations:
+            return {"error": f"No options data available for {symbol}"}
+
+        # Select expiration
+        exp_date = expirations[0] if expiration == "nearest" else expiration
+        if exp_date not in expirations:
+            return {"error": f"Expiration {expiration} not available"}
+
+        # Fetch option chain
+        chain = ticker.option_chain(exp_date)
+        calls = chain.calls
+        puts = chain.puts
+
+        # Current price (for ATM calculation)
+        current_price = ticker.fast_info.get("lastPrice", 0)
+
+        # Calculate positioning metrics
+        call_oi_total = int(calls["openInterest"].sum())
+        put_oi_total = int(puts["openInterest"].sum())
+        pc_ratio_oi = put_oi_total / call_oi_total if call_oi_total > 0 else 0
+
+        call_volume_total = int(calls["volume"].sum())
+        put_volume_total = int(puts["volume"].sum())
+        pc_ratio_vol = put_volume_total / call_volume_total if call_volume_total > 0 else 0
+
+        # Find ATM strike (closest to current price)
+        atm_strike = calls["strike"].iloc[(calls["strike"] - current_price).abs().argsort()[0]]
+
+        # Get ATM IV
+        atm_call_row = calls[calls["strike"] == atm_strike]
+        atm_put_row = puts[puts["strike"] == atm_strike]
+
+        atm_call_iv = float(atm_call_row["impliedVolatility"].values[0] * 100)
+        atm_put_iv = float(atm_put_row["impliedVolatility"].values[0] * 100)
+
+        # Top positions by OI
+        top_calls = calls.nlargest(4, "openInterest")[
+            ["strike", "openInterest", "lastPrice", "impliedVolatility"]
+        ].copy()
+        top_puts = puts.nlargest(4, "openInterest")[
+            ["strike", "openInterest", "lastPrice", "impliedVolatility"]
+        ].copy()
+
+        # Vol skew (OTM vs ATM)
+        otm_put_strikes = puts[puts["strike"] < current_price * 0.9]
+        otm_call_strikes = calls[calls["strike"] > current_price * 1.1]
+
+        otm_put_iv_avg = (
+            float(otm_put_strikes["impliedVolatility"].mean() * 100)
+            if len(otm_put_strikes) > 0
+            else atm_put_iv
+        )
+        otm_call_iv_avg = (
+            float(otm_call_strikes["impliedVolatility"].mean() * 100)
+            if len(otm_call_strikes) > 0
+            else atm_call_iv
+        )
+
+        put_skew = otm_put_iv_avg - atm_put_iv
+        call_skew = otm_call_iv_avg - atm_call_iv
+
+        # Term structure (if multiple expirations available)
+        term_structure = []
+        if len(expirations) >= 3:  # noqa: PLR2004
+            for exp in expirations[:3]:  # Near, mid, far
+                chain_exp = ticker.option_chain(exp)
+                calls_exp = chain_exp.calls
+                atm_exp = calls_exp["strike"].iloc[
+                    (calls_exp["strike"] - current_price).abs().argsort()[0]
+                ]
+                atm_row_exp = calls_exp[calls_exp["strike"] == atm_exp]
+                iv_exp = float(atm_row_exp["impliedVolatility"].values[0] * 100)
+
+                # Days to expiration
+                exp_datetime = datetime.strptime(exp, "%Y-%m-%d").replace(
+                    tzinfo=ZoneInfo("America/New_York")
+                )
+                now = datetime.now(ZoneInfo("America/New_York"))
+                dte = (exp_datetime - now).days
+
+                term_structure.append({"expiration": exp, "dte": dte, "iv": iv_exp})
+
+        contango = (
+            term_structure[0]["iv"] - term_structure[-1]["iv"]
+            if len(term_structure) >= 2  # noqa: PLR2004
+            else 0
+        )
+
+        # Days to expiration
+        exp_datetime = datetime.strptime(exp_date, "%Y-%m-%d").replace(
+            tzinfo=ZoneInfo("America/New_York")
+        )
+        now = datetime.now(ZoneInfo("America/New_York"))
+        dte = (exp_datetime - now).days
+
+        # Timestamp
+        now = datetime.now(ZoneInfo("America/New_York"))
+        timestamp = now.strftime("%Y-%m-%d %H:%M %Z")
+
+        return {
+            "symbol": symbol,
+            "current_price": float(current_price),
+            "expiration": exp_date,
+            "dte": dte,
+            "atm_strike": float(atm_strike),
+            # Positioning
+            "call_oi_total": call_oi_total,
+            "put_oi_total": put_oi_total,
+            "pc_ratio_oi": pc_ratio_oi,
+            "pc_ratio_vol": pc_ratio_vol,
+            "call_volume_total": call_volume_total,
+            "put_volume_total": put_volume_total,
+            # IV
+            "atm_call_iv": atm_call_iv,
+            "atm_put_iv": atm_put_iv,
+            "iv_spread": atm_call_iv - atm_put_iv,
+            # Skew
+            "put_skew": put_skew,
+            "call_skew": call_skew,
+            # Top positions
+            "top_calls": top_calls,
+            "top_puts": top_puts,
+            # Term structure
+            "term_structure": term_structure,
+            "contango": contango,
+            # Timestamp
+            "timestamp": timestamp,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def format_options(data: dict[str, Any]) -> str:  # noqa: PLR0915, PLR0912
+    """
+    Format options data in BBG Lite style.
+
+    Context delivery system - NO recommendations.
+    """
+    if "error" in data:
+        return f"ERROR: {data['error']}"
+
+    # Header (context: ticker, expiration, current price)
+    symbol = data["symbol"]
+    price = data["current_price"]
+    exp = data["expiration"]
+    dte = data["dte"]
+    atm = data["atm_strike"]
+
+    lines = [
+        f"{symbol} US EQUITY                          OPTIONS ANALYSIS",
+        f"Last: ${price:.2f}                          Exp: {exp} ({dte}d)  |  ATM: ${atm:.0f}",
+        "",
+    ]
+
+    # Positioning (most important - hierarchy principle)
+    pc_oi = data["pc_ratio_oi"]
+    # Thresholds: 0.8 = bullish, 1.2 = bearish
+    sentiment = "BULLISH" if pc_oi < 0.8 else "BEARISH" if pc_oi > 1.2 else "NEUTRAL"  # noqa: PLR2004
+    call_oi = data["call_oi_total"]
+    put_oi = data["put_oi_total"]
+
+    multiplier = ""
+    if pc_oi < 0.8 and pc_oi > 0:  # noqa: PLR2004
+        multiplier = f" (calls {(1/pc_oi):.1f}x puts)"
+    elif pc_oi > 1.2:  # noqa: PLR2004
+        multiplier = f" (puts {pc_oi:.1f}x calls)"
+
+    lines.extend(
+        [
+            "POSITIONING (Open Interest)",
+            f"Calls:  {call_oi:,} OI",
+            f"Puts:   {put_oi:,} OI",
+            f"P/C Ratio:  {pc_oi:.2f}    ← {sentiment}{multiplier}",
+            "",
+        ]
+    )
+
+    # Top positions (density principle - multi-column)
+    lines.extend(
+        [
+            "TOP POSITIONS BY STRIKE",
+            "CALLS                                   PUTS",
+            "Strike    OI     Last      IV          Strike    OI     Last      IV",
+            "────────────────────────────────────   ──────────────────────────────────────",
+        ]
+    )
+
+    top_calls = data["top_calls"]
+    top_puts = data["top_puts"]
+    max_rows = max(len(top_calls), len(top_puts))
+
+    for i in range(max_rows):
+        call_line = ""
+        if i < len(top_calls):
+            c = top_calls.iloc[i]
+            strike = c["strike"]
+            oi = int(c["openInterest"])
+            last = c["lastPrice"]
+            iv = c["impliedVolatility"] * 100
+            call_line = f"${strike:.0f}   {oi:>6,}    ${last:>5.2f}    {iv:>5.1f}%"
+
+        put_line = ""
+        if i < len(top_puts):
+            p = top_puts.iloc[i]
+            strike = p["strike"]
+            oi = int(p["openInterest"])
+            last = p["lastPrice"]
+            iv = p["impliedVolatility"] * 100
+            put_line = f"${strike:.0f}   {oi:>6,}    ${last:>5.2f}    {iv:>5.1f}%"
+
+        lines.append(f"{call_line:<39} {put_line}")
+
+    lines.append("")
+
+    # IV structure (context principle - inline interpretation)
+    atm_call_iv = data["atm_call_iv"]
+    atm_put_iv = data["atm_put_iv"]
+    iv_spread = data["iv_spread"]
+    unusual = ""
+    if abs(iv_spread) > 2:  # noqa: PLR2004
+        direction = "calls" if iv_spread > 0 else "puts"
+        unusual = f"← UNUSUAL ({direction} typically lower)"
+
+    lines.extend(
+        [
+            "IMPLIED VOLATILITY",
+            f"ATM Calls:     {atm_call_iv:.1f}%",
+            f"ATM Puts:      {atm_put_iv:.1f}%",
+            f"Spread:        {iv_spread:+.1f}% {'calls' if iv_spread > 0 else 'puts'}  {unusual}",
+            "",
+        ]
+    )
+
+    # Vol skew
+    put_skew = data["put_skew"]
+    call_skew = data["call_skew"]
+    skew_note = ""
+    if abs(put_skew) < 1:
+        skew_note = "← FLAT (no panic premium)"
+
+    lines.extend(
+        [
+            "VOL SKEW",
+            f"OTM Puts vs ATM:  {put_skew:+.1f}%    {skew_note}",
+            f"OTM Calls vs ATM: {call_skew:+.1f}%",
+            "",
+        ]
+    )
+
+    # Term structure (if available)
+    if data["term_structure"]:
+        lines.append("TERM STRUCTURE")
+        for idx, ts in enumerate(data["term_structure"]):
+            label = (
+                "Near"
+                if idx == 0
+                else "Mid"
+                if idx == 1
+                else "Far"
+            )
+            marker = "← Current" if idx == 0 else ""
+            lines.append(f"{label} ({ts['dte']}d):    {ts['iv']:.1f}%       {marker}")
+
+        contango = data["contango"]
+        if contango > 5:  # noqa: PLR2004
+            far_iv = data["term_structure"][-1]["iv"]
+            compression_note = f"← Market expects compression (to {far_iv:.1f}%)"
+        elif contango < -5:  # noqa: PLR2004
+            compression_note = "← Backwardation (vol expected to rise)"
+        else:
+            compression_note = "← Flat term structure"
+        lines.append(f"Contango:     {contango:+.1f}%       {compression_note}")
+        lines.append("")
+
+    # Interpretation (progressive disclosure principle - summary at bottom)
+    # Context delivery, NO recommendations
+    interp_lines = ["INTERPRETATION"]
+
+    # Positioning insight
+    if pc_oi < 0.7 and pc_oi > 0:  # noqa: PLR2004
+        interp_lines.append(
+            f"• Heavy call positioning: OI P/C {pc_oi:.2f} ({(1/pc_oi):.1f}x calls vs puts)"
+        )
+    elif pc_oi > 1.3:  # noqa: PLR2004
+        interp_lines.append(
+            f"• Heavy put positioning: OI P/C {pc_oi:.2f} ({pc_oi:.1f}x puts vs calls)"
+        )
+
+    # IV spread insight
+    if abs(iv_spread) > 3:  # noqa: PLR2004
+        direction = "calls" if iv_spread > 0 else "puts"
+        opposite = "puts" if iv_spread > 0 else "calls"
+        interp_lines.append(
+            f"• {direction.capitalize()} IV elevated: "
+            f"{abs(iv_spread):.1f}% above {opposite}"
+        )
+
+    # Skew insight
+    if abs(put_skew) < 1:
+        interp_lines.append("• Flat skew: no panic premium in OTM puts")
+
+    # Term structure insight
+    if data["term_structure"] and abs(contango) > 5:  # noqa: PLR2004
+        if contango > 5:  # noqa: PLR2004
+            near_iv = data["term_structure"][0]["iv"]
+            far_iv = data["term_structure"][-1]["iv"]
+            interp_lines.append(
+                f"• Term structure contango: market pricing vol compression "
+                f"from {near_iv:.1f}% → {far_iv:.1f}%"
+            )
+        else:
+            interp_lines.append("• Backwardation: market expects volatility to increase")
+
+    lines.extend(interp_lines)
+    lines.append("")
+
+    # Footer (context + navigation affordances - UI vs API principle)
+    lines.extend(
+        [
+            f"Data as of {data['timestamp']} | Source: yfinance",
+            f"Back: ticker('{symbol}')",
+        ]
+    )
 
     return "\n".join(lines)
