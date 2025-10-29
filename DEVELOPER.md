@@ -24,6 +24,7 @@ make logs       # Tail server logs
 
 **Clean separation:**
 - `yfinance_ux_mcp/market_data.py` - Business logic (zero MCP dependencies)
+- `yfinance_ux_mcp/tools.py` - MCP tool definitions (single source of truth)
 - `yfinance_ux_mcp/server.py` - MCP protocol wrapper, stdio transport (for local CLI)
 - `yfinance_ux_mcp/server_http.py` - MCP protocol wrapper, SSE/HTTP transport (for alpha-server)
 - `yfinance_ux_mcp/historical.py` - Optimized data fetching
@@ -31,11 +32,12 @@ make logs       # Tail server logs
 
 **No MCP in business logic. Protocol layer is just routing.**
 
-**CRITICAL: Dual server implementation**
-- `server.py` and `server_http.py` must define **identical tool sets**
-- Both import from `market_data.py` (single source of truth for business logic)
-- When adding/updating tools: **modify both server files** or tools won't be available via HTTP/SSE
-- Test both: `./cli list-tools` (stdio) and check alpha-server connections (HTTP/SSE)
+**DRY principle enforced:**
+- Tool definitions live in `tools.py` **only** (single source of truth)
+- Both `server.py` and `server_http.py` import from `tools.py`
+- To add/modify tools: Edit `tools.py` (not the server files)
+- Both servers automatically get the same tool set
+- Test: `./cli list-tools` and check alpha-server connections
 
 ## Tools (5 Screens)
 
