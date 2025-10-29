@@ -2107,13 +2107,8 @@ def format_options(data: dict[str, Any]) -> str:  # noqa: PLR0915, PLR0912
             lines.append(f"... and {len(all_exp) - 10} more expirations")
         lines.append("")
 
-    # Footer (context + navigation affordances - UI vs API principle)
-    lines.extend(
-        [
-            f"Data as of {data['timestamp']} | Source: yfinance",
-            f"Back: ticker('{symbol}')",
-        ]
-    )
+    # Footer
+    lines.append(f"Data as of {data['timestamp']} | Source: yfinance")
 
     return "\n".join(lines)
 
@@ -2141,8 +2136,6 @@ def format_options_summary(data: dict[str, Any]) -> str:
         f"P/C Ratio (OI):  {pc_oi:.2f}    ← {sentiment}",
         f"ATM IV:  {atm_call_iv:.1f}% (calls)  {atm_put_iv:.1f}% (puts)",
         f"Nearest Exp:  {exp} ({dte}d)",
-        "",
-        f"For full analysis: ticker_options('{data['symbol']}')",
     ]
 
     return "\n".join(lines)
