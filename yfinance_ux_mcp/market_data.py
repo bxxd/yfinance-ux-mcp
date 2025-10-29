@@ -1520,7 +1520,7 @@ def format_news(data: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]:  # noqa: PLR0915
+def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]:  # noqa: PLR0915, PLR0912
     """
     Fetch options chain data for a symbol.
 
@@ -1548,6 +1548,10 @@ def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]
         chain = ticker.option_chain(exp_date)
         calls = chain.calls
         puts = chain.puts
+
+        # Check if we have options data
+        if calls.empty or puts.empty:
+            return {"error": f"No options data available for {symbol} expiration {exp_date}"}
 
         # Current price (for ATM calculation)
         current_price = ticker.fast_info.get("lastPrice", 0)
