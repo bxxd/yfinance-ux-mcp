@@ -15,7 +15,7 @@ make logs       # Tail server logs
 ./cli markets              # Test market overview
 ./cli sector technology    # Test sector drill-down
 ./cli ticker TSLA          # Test single ticker
-./cli ticker TSLA,F,GM     # Test batch comparison
+./cli ticker TSLA F GM     # Test batch comparison (space-separated)
 ./cli news TSLA            # Test news
 ./cli options PALL         # Test options analysis
 ```
@@ -31,6 +31,15 @@ make logs       # Tail server logs
 **No MCP in business logic. Protocol layer is just routing.**
 
 ## Tools (5 Screens)
+
+**Hierarchical naming:** Tools use `ticker_*` prefix to show relationship:
+- `ticker()` - Main security screen
+- `ticker_news()` - News tab/drill-down for a ticker
+- `ticker_options()` - Options tab/drill-down for a ticker
+
+**Why this matters:** Prevents confusion (e.g., "options" could mean settings/config). Makes hierarchy explicit for UI design (tabs in alpha-server).
+
+**Concrete examples in descriptions:** Each tool description includes actual output format so Claude sees what data is available without testing first.
 
 ### markets()
 **Market overview - complete factor landscape**
@@ -71,7 +80,7 @@ Displays:
 - 52-week range with visual bar
 - News preview (5 most recent headlines)
 
-### news(symbol)
+### ticker_news(symbol)
 **Recent articles for a ticker**
 
 Parameters: `symbol` (e.g., 'TSLA')
@@ -82,7 +91,9 @@ Shows all available articles (~10) with:
 - Source attribution
 - URLs for full articles
 
-### options(symbol, expiration='nearest')
+**Navigation:** Used from ticker() news preview, or directly for full article list.
+
+### ticker_options(symbol, expiration='nearest')
 **Options chain analysis - positioning and IV structure**
 
 Parameters:
@@ -96,6 +107,8 @@ Shows:
 - **Vol skew**: OTM vs ATM (panic premium detection)
 - **Term structure**: Near/mid/far IV, contango
 - **Interpretation**: Context insights (NO recommendations)
+
+**Navigation:** Used from ticker() for detailed options analysis, or directly.
 
 ## Core Principles
 
@@ -112,8 +125,10 @@ Each screen = one question answered:
 - markets() = "What's the market doing?"
 - sector('technology') = "How's this sector performing?"
 - ticker('TSLA') = "Tell me about this stock?"
-- news('TSLA') = "What's the recent news?"
-- options('PALL') = "What's the options positioning?"
+- ticker_news('TSLA') = "What's the recent news?" (tab/drill-down from ticker)
+- ticker_options('PALL') = "What's the options positioning?" (tab/drill-down from ticker)
+
+**Tab structure:** ticker() is the main screen, with ticker_news() and ticker_options() as tabs/drill-downs. This matches the intended alpha-server UI design (ticker page with Overview | News | Options tabs).
 
 ### 4. Human-Readable Output
 BBG Lite formatted text (dense, scannable, professional). Not JSON. Claude reads it directly.
@@ -178,8 +193,8 @@ momentum_1y = ((current_price - price_1y_ago) / price_1y_ago * 100)
 ./cli markets              # Test output
 ./cli sector technology
 ./cli ticker TSLA
-./cli ticker TSLA,F,GM     # Batch mode
-./cli news TSLA
+./cli ticker TSLA F GM     # Batch mode (space-separated)
+./cli news TSLA            # CLI still uses short name
 ./cli options PALL
 ```
 
@@ -189,9 +204,9 @@ mcp__idio-yf__markets()
 mcp__idio-yf__sector(name='technology')
 mcp__idio-yf__ticker(symbol='TSLA')
 mcp__idio-yf__ticker(symbol=['TSLA', 'F', 'GM'])  # Batch
-mcp__idio-yf__news(symbol='TSLA')
-mcp__idio-yf__options(symbol='PALL')
-mcp__idio-yf__options(symbol='PALL', expiration='2025-12-20')
+mcp__idio-yf__ticker_news(symbol='TSLA')
+mcp__idio-yf__ticker_options(symbol='PALL')
+mcp__idio-yf__ticker_options(symbol='PALL', expiration='2025-12-20')
 ```
 
 **Unit tests:**
@@ -268,8 +283,8 @@ No extras. Keep it minimal.
 - markets() - Complete factor landscape
 - sector() - Sector drill-down
 - ticker() - Individual security (single + batch comparison)
-- news() - Recent articles
-- options() - Positioning and IV analysis
+- ticker_news() - Recent articles (tab/drill-down)
+- ticker_options() - Positioning and IV analysis (tab/drill-down)
 
 **BBG Lite output** - Dense, scannable, professional formatting
 
