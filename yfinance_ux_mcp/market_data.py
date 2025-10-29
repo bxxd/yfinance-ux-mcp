@@ -1276,18 +1276,12 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
         lines.append(f"Current          {price:7.2f}  [{bar}]  {range_pct:.0f}% of range")
         lines.append("")
 
-    # Options Analysis (append full section)
+    # Options Positioning (brief summary)
     options_data = data.get("options_data")
     if options_data and not options_data.get("error"):
-        # Format the full options section
-        options_formatted = format_options(options_data)
-        # Extract core content: skip header (first 3 lines) and footer (last 2 lines)
-        options_lines = options_formatted.split("\n")
-        # Skip first 3 lines (header) and last 2 lines (footer)
-        core_options = options_lines[3:-2]
-        # Prepend with OPTIONS ANALYSIS header
-        lines.append("OPTIONS ANALYSIS")
-        lines.extend(core_options)
+        # Format brief summary for ticker overview
+        options_summary = format_options_summary(options_data)
+        lines.append(options_summary)
 
     # Footer
     lines.append("")
@@ -1526,7 +1520,7 @@ def format_news(data: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]:
+def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]:  # noqa: PLR0915
     """
     Fetch options chain data for a symbol.
 
@@ -1577,13 +1571,32 @@ def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]
         atm_call_iv = float(atm_call_row["impliedVolatility"].values[0] * 100)
         atm_put_iv = float(atm_put_row["impliedVolatility"].values[0] * 100)
 
-        # Top positions by OI
-        top_calls = calls.nlargest(4, "openInterest")[
-            ["strike", "openInterest", "lastPrice", "impliedVolatility"]
+        # Top positions by OI (expand to 10)
+        top_calls_oi = calls.nlargest(10, "openInterest")[
+            ["strike", "openInterest", "volume", "lastPrice", "impliedVolatility"]
         ].copy()
-        top_puts = puts.nlargest(4, "openInterest")[
-            ["strike", "openInterest", "lastPrice", "impliedVolatility"]
+        top_puts_oi = puts.nlargest(10, "openInterest")[
+            ["strike", "openInterest", "volume", "lastPrice", "impliedVolatility"]
         ].copy()
+
+        # Top positions by volume
+        top_calls_vol = calls.nlargest(10, "volume")[
+            ["strike", "openInterest", "volume", "lastPrice", "impliedVolatility"]
+        ].copy()
+        top_puts_vol = puts.nlargest(10, "volume")[
+            ["strike", "openInterest", "volume", "lastPrice", "impliedVolatility"]
+        ].copy()
+
+        # ITM vs OTM breakdown
+        calls_itm = calls[calls["strike"] < current_price]
+        calls_otm = calls[calls["strike"] >= current_price]
+        puts_itm = puts[puts["strike"] > current_price]
+        puts_otm = puts[puts["strike"] <= current_price]
+
+        call_oi_itm = int(calls_itm["openInterest"].sum())
+        call_oi_otm = int(calls_otm["openInterest"].sum())
+        put_oi_itm = int(puts_itm["openInterest"].sum())
+        put_oi_otm = int(puts_otm["openInterest"].sum())
 
         # Vol skew (OTM vs ATM)
         otm_put_strikes = puts[puts["strike"] < current_price * 0.9]
@@ -1630,6 +1643,110 @@ def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]
             else 0
         )
 
+        # All expirations summary
+        all_expirations = []
+        for exp in expirations:
+            try:
+                chain_exp = ticker.option_chain(exp)
+                calls_exp = chain_exp.calls
+                puts_exp = chain_exp.puts
+
+                # ATM IV for this expiration
+                atm_exp = calls_exp["strike"].iloc[
+                    (calls_exp["strike"] - current_price).abs().argsort()[0]
+                ]
+                atm_row_exp = calls_exp[calls_exp["strike"] == atm_exp]
+                iv_exp = float(atm_row_exp["impliedVolatility"].values[0] * 100)
+
+                # OI for this expiration
+                call_oi_exp = int(calls_exp["openInterest"].sum())
+                put_oi_exp = int(puts_exp["openInterest"].sum())
+                total_oi_exp = call_oi_exp + put_oi_exp
+
+                # Volume for this expiration
+                call_vol_exp = int(calls_exp["volume"].sum())
+                put_vol_exp = int(puts_exp["volume"].sum())
+                total_vol_exp = call_vol_exp + put_vol_exp
+
+                # DTE
+                exp_datetime = datetime.strptime(exp, "%Y-%m-%d").replace(
+                    tzinfo=ZoneInfo("America/New_York")
+                )
+                now = datetime.now(ZoneInfo("America/New_York"))
+                dte_exp = (exp_datetime - now).days
+
+                all_expirations.append({
+                    "expiration": exp,
+                    "dte": dte_exp,
+                    "iv": iv_exp,
+                    "total_oi": total_oi_exp,
+                    "total_volume": total_vol_exp,
+                    "call_oi": call_oi_exp,
+                    "put_oi": put_oi_exp,
+                })
+            except Exception:
+                continue
+
+        # Max pain calculation (strike with most option seller pain)
+        # Max pain = strike where sum of (calls ITM value + puts ITM value) is minimized
+        max_pain_strike = 0
+        min_pain_value = float("inf")
+
+        for strike in sorted(set(calls["strike"]) | set(puts["strike"])):
+            # Calculate pain for this strike
+            call_pain = sum(
+                max(0, strike - c_strike) * c_oi
+                for c_strike, c_oi in zip(calls["strike"], calls["openInterest"], strict=False)
+                if c_strike < strike
+            )
+            put_pain = sum(
+                max(0, p_strike - strike) * p_oi
+                for p_strike, p_oi in zip(puts["strike"], puts["openInterest"], strict=False)
+                if p_strike > strike
+            )
+            total_pain = call_pain + put_pain
+
+            if total_pain < min_pain_value:
+                min_pain_value = total_pain
+                max_pain_strike = strike
+
+        # Unusual activity detection (volume >> OI)
+        unusual_calls = calls[calls["volume"] > calls["openInterest"] * 2]
+        unusual_puts = puts[puts["volume"] > puts["openInterest"] * 2]
+        unusual_activity = len(unusual_calls) + len(unusual_puts) > 0
+
+        # Historical IV (last 30 days) for IV rank/percentile
+        # Fetch historical volatility data
+        hist_iv_data = None
+        try:
+            hist = ticker.history(period="3mo", interval="1d")
+            if not hist.empty and len(hist) >= 30:  # noqa: PLR2004
+                # Calculate 30-day historical volatility
+                returns = hist["Close"].pct_change().dropna()
+                hist_vol_30d = float(returns.std() * (252 ** 0.5) * 100)
+
+                # Calculate 52-week IV range (approximate from historical vol)
+                hist_90d = ticker.history(period="1y", interval="1d")
+                if not hist_90d.empty:
+                    returns_1y = hist_90d["Close"].pct_change().dropna()
+                    # Rolling 30-day volatility over 1 year
+                    rolling_vol = returns_1y.rolling(30).std() * (252 ** 0.5) * 100
+                    iv_high_52w = float(rolling_vol.max())
+                    iv_low_52w = float(rolling_vol.min())
+
+                    # IV rank (where current IV sits in 52-week range)
+                    iv_rank = ((atm_call_iv - iv_low_52w) / (iv_high_52w - iv_low_52w) * 100
+                               if iv_high_52w > iv_low_52w else 50)
+
+                    hist_iv_data = {
+                        "hist_vol_30d": hist_vol_30d,
+                        "iv_high_52w": iv_high_52w,
+                        "iv_low_52w": iv_low_52w,
+                        "iv_rank": iv_rank,
+                    }
+        except Exception:
+            pass
+
         # Days to expiration
         exp_datetime = datetime.strptime(exp_date, "%Y-%m-%d").replace(
             tzinfo=ZoneInfo("America/New_York")
@@ -1654,6 +1771,11 @@ def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]
             "pc_ratio_vol": pc_ratio_vol,
             "call_volume_total": call_volume_total,
             "put_volume_total": put_volume_total,
+            # ITM/OTM breakdown
+            "call_oi_itm": call_oi_itm,
+            "call_oi_otm": call_oi_otm,
+            "put_oi_itm": put_oi_itm,
+            "put_oi_otm": put_oi_otm,
             # IV
             "atm_call_iv": atm_call_iv,
             "atm_put_iv": atm_put_iv,
@@ -1661,12 +1783,24 @@ def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]
             # Skew
             "put_skew": put_skew,
             "call_skew": call_skew,
-            # Top positions
-            "top_calls": top_calls,
-            "top_puts": top_puts,
+            # Top positions (OI and volume)
+            "top_calls_oi": top_calls_oi,
+            "top_puts_oi": top_puts_oi,
+            "top_calls_vol": top_calls_vol,
+            "top_puts_vol": top_puts_vol,
             # Term structure
             "term_structure": term_structure,
             "contango": contango,
+            # All expirations
+            "all_expirations": all_expirations,
+            # Max pain
+            "max_pain_strike": float(max_pain_strike),
+            # Unusual activity
+            "unusual_activity": unusual_activity,
+            "unusual_calls": unusual_calls,
+            "unusual_puts": unusual_puts,
+            # Historical IV context
+            "hist_iv_data": hist_iv_data,
             # Timestamp
             "timestamp": timestamp,
         }
@@ -1722,37 +1856,40 @@ def format_options(data: dict[str, Any]) -> str:  # noqa: PLR0915, PLR0912
     # Top positions (density principle - multi-column)
     lines.extend(
         [
-            "TOP POSITIONS BY STRIKE",
-            "CALLS                                   PUTS",
-            "Strike    OI     Last      IV          Strike    OI     Last      IV",
-            "────────────────────────────────────   ──────────────────────────────────────",
+            "TOP POSITIONS BY OI (Top 10)",
+            "CALLS                                               PUTS",
+            "Strike    OI      Vol     Last      IV          Strike    OI      Vol     Last      IV",  # noqa: E501
+            "───────────────────────────────────────────────   ───────────────────────────────────────────────",  # noqa: E501
         ]
     )
 
-    top_calls = data["top_calls"]
-    top_puts = data["top_puts"]
-    max_rows = max(len(top_calls), len(top_puts))
+    top_calls_oi = data["top_calls_oi"]
+    top_puts_oi = data["top_puts_oi"]
+    max_rows = max(len(top_calls_oi), len(top_puts_oi))
 
-    for i in range(max_rows):
+    # Show top 10 (or max available)
+    for i in range(min(max_rows, 10)):
         call_line = ""
-        if i < len(top_calls):
-            c = top_calls.iloc[i]
+        if i < len(top_calls_oi):
+            c = top_calls_oi.iloc[i]
             strike = c["strike"]
             oi = int(c["openInterest"])
+            vol = int(c["volume"])
             last = c["lastPrice"]
             iv = c["impliedVolatility"] * 100
-            call_line = f"${strike:.0f}   {oi:>6,}    ${last:>5.2f}    {iv:>5.1f}%"
+            call_line = f"${strike:.0f}   {oi:>6,}  {vol:>6,}    ${last:>5.2f}    {iv:>5.1f}%"
 
         put_line = ""
-        if i < len(top_puts):
-            p = top_puts.iloc[i]
+        if i < len(top_puts_oi):
+            p = top_puts_oi.iloc[i]
             strike = p["strike"]
             oi = int(p["openInterest"])
+            vol = int(p["volume"])
             last = p["lastPrice"]
             iv = p["impliedVolatility"] * 100
-            put_line = f"${strike:.0f}   {oi:>6,}    ${last:>5.2f}    {iv:>5.1f}%"
+            put_line = f"${strike:.0f}   {oi:>6,}  {vol:>6,}    ${last:>5.2f}    {iv:>5.1f}%"
 
-        lines.append(f"{call_line:<39} {put_line}")
+        lines.append(f"{call_line:<55} {put_line}")
 
     lines.append("")
 
@@ -1858,6 +1995,114 @@ def format_options(data: dict[str, Any]) -> str:  # noqa: PLR0915, PLR0912
     lines.extend(interp_lines)
     lines.append("")
 
+    # ITM/OTM Breakdown
+    call_oi_itm = data["call_oi_itm"]
+    call_oi_otm = data["call_oi_otm"]
+    put_oi_itm = data["put_oi_itm"]
+    put_oi_otm = data["put_oi_otm"]
+
+    call_itm_pct = (call_oi_itm/(call_oi_itm+call_oi_otm)*100) if (call_oi_itm+call_oi_otm) > 0 else 0  # noqa: E501
+    call_otm_pct = (call_oi_otm/(call_oi_itm+call_oi_otm)*100) if (call_oi_itm+call_oi_otm) > 0 else 0  # noqa: E501
+    put_itm_pct = (put_oi_itm/(put_oi_itm+put_oi_otm)*100) if (put_oi_itm+put_oi_otm) > 0 else 0
+    put_otm_pct = (put_oi_otm/(put_oi_itm+put_oi_otm)*100) if (put_oi_itm+put_oi_otm) > 0 else 0
+
+    lines.extend([
+        "ITM/OTM BREAKDOWN",
+        f"Calls ITM:  {call_oi_itm:,}    ({call_itm_pct:.1f}%)" if call_oi_itm > 0 else "Calls ITM:  0",  # noqa: E501
+        f"Calls OTM:  {call_oi_otm:,}    ({call_otm_pct:.1f}%)" if call_oi_otm > 0 else "Calls OTM:  0",  # noqa: E501
+        f"Puts ITM:   {put_oi_itm:,}    ({put_itm_pct:.1f}%)" if put_oi_itm > 0 else "Puts ITM:   0",  # noqa: E501
+        f"Puts OTM:   {put_oi_otm:,}    ({put_otm_pct:.1f}%)" if put_oi_otm > 0 else "Puts OTM:   0",  # noqa: E501
+        "",
+    ])
+
+    # Volume Analysis
+    pc_vol = data["pc_ratio_vol"]
+    call_vol = data["call_volume_total"]
+    put_vol = data["put_volume_total"]
+
+    vol_sentiment = "BULLISH" if pc_vol < 0.8 else "BEARISH" if pc_vol > 1.2 else "NEUTRAL"  # noqa: PLR2004
+    lines.extend([
+        "VOLUME ANALYSIS",
+        f"Call Volume:  {call_vol:,}",
+        f"Put Volume:   {put_vol:,}",
+        f"P/C Volume:   {pc_vol:.2f}    ← {vol_sentiment}",
+        "",
+    ])
+
+    # Max Pain
+    max_pain = data["max_pain_strike"]
+    price_vs_max_pain = ((price - max_pain) / price * 100) if max_pain > 0 else 0
+    lines.extend([
+        "MAX PAIN ANALYSIS",
+        f"Max Pain Strike:  ${max_pain:.0f}",
+        f"Current vs Max Pain:  {price_vs_max_pain:+.1f}%",
+        "",
+    ])
+
+    # Unusual Activity
+    unusual = data["unusual_activity"]
+    if unusual:
+        unusual_calls = data["unusual_calls"]
+        unusual_puts = data["unusual_puts"]
+        lines.extend([
+            "UNUSUAL ACTIVITY (Vol > 2x OI)",
+            f"Unusual Call Strikes: {len(unusual_calls)}",
+            f"Unusual Put Strikes: {len(unusual_puts)}",
+        ])
+        # Show top 3 unusual strikes
+        if len(unusual_calls) > 0:
+            lines.append("Top Unusual Calls:")
+            for _, row in unusual_calls.nlargest(3, "volume").iterrows():
+                strike = row["strike"]
+                vol = int(row["volume"])
+                oi = int(row["openInterest"])
+                lines.append(f"  ${strike:.0f}  Vol:{vol:,}  OI:{oi:,}  Ratio:{vol/oi:.1f}x")
+        if len(unusual_puts) > 0:
+            lines.append("Top Unusual Puts:")
+            for _, row in unusual_puts.nlargest(3, "volume").iterrows():
+                strike = row["strike"]
+                vol = int(row["volume"])
+                oi = int(row["openInterest"])
+                lines.append(f"  ${strike:.0f}  Vol:{vol:,}  OI:{oi:,}  Ratio:{vol/oi:.1f}x")
+        lines.append("")
+    else:
+        lines.extend([
+            "UNUSUAL ACTIVITY",
+            "No unusual activity detected (Vol < 2x OI)",
+            "",
+        ])
+
+    # Historical IV Context
+    hist_iv = data.get("hist_iv_data")
+    if hist_iv:
+        lines.extend([
+            "HISTORICAL IV CONTEXT",
+            f"Current ATM IV:  {atm_call_iv:.1f}%",
+            f"30-Day Hist Vol: {hist_iv['hist_vol_30d']:.1f}%",
+            f"52-Week IV Range: {hist_iv['iv_low_52w']:.1f}% - {hist_iv['iv_high_52w']:.1f}%",
+            f"IV Rank:  {hist_iv['iv_rank']:.0f}%  (percentile in 52-week range)",
+            "",
+        ])
+
+    # All Expirations Summary
+    all_exp = data.get("all_expirations", [])
+    if all_exp:
+        lines.extend([
+            f"ALL EXPIRATIONS ({len(all_exp)} available)",
+            "Exp Date       DTE     IV     Total OI    Total Vol",
+            "─────────────────────────────────────────────────────",
+        ])
+        for exp in all_exp[:10]:  # Show first 10
+            exp_date = exp["expiration"]
+            dte = exp["dte"]
+            iv = exp["iv"]
+            total_oi = exp["total_oi"]
+            total_vol = exp["total_volume"]
+            lines.append(f"{exp_date}   {dte:>3}d   {iv:>5.1f}%   {total_oi:>8,}   {total_vol:>9,}")
+        if len(all_exp) > 10:  # noqa: PLR2004
+            lines.append(f"... and {len(all_exp) - 10} more expirations")
+        lines.append("")
+
     # Footer (context + navigation affordances - UI vs API principle)
     lines.extend(
         [
@@ -1865,5 +2110,35 @@ def format_options(data: dict[str, Any]) -> str:  # noqa: PLR0915, PLR0912
             f"Back: ticker('{symbol}')",
         ]
     )
+
+    return "\n".join(lines)
+
+
+def format_options_summary(data: dict[str, Any]) -> str:
+    """
+    Format brief options summary for ticker() screen.
+
+    Shows only key positioning metrics, not full analysis.
+    """
+    if "error" in data:
+        return f"OPTIONS: No data available ({data['error']})"
+
+    pc_oi = data["pc_ratio_oi"]
+    atm_call_iv = data["atm_call_iv"]
+    atm_put_iv = data["atm_put_iv"]
+    exp = data["expiration"]
+    dte = data["dte"]
+
+    # Sentiment
+    sentiment = "BULLISH" if pc_oi < 0.8 else "BEARISH" if pc_oi > 1.2 else "NEUTRAL"  # noqa: PLR2004
+
+    lines = [
+        "OPTIONS POSITIONING",
+        f"P/C Ratio (OI):  {pc_oi:.2f}    ← {sentiment}",
+        f"ATM IV:  {atm_call_iv:.1f}% (calls)  {atm_put_iv:.1f}% (puts)",
+        f"Nearest Exp:  {exp} ({dte}d)",
+        "",
+        f"For full analysis: ticker_options('{data['symbol']}')",
+    ]
 
     return "\n".join(lines)

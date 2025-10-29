@@ -123,7 +123,12 @@ High              488.54
 Low               214.25
 Current           460.55  [=================░░░]  90% of range
 
-For options analysis: ticker_options('TSLA')
+OPTIONS POSITIONING
+P/C Ratio (OI):  0.57    ← BULLISH
+ATM IV:  55.5% (calls)  51.5% (puts)
+Nearest Exp:  2025-11-21 (23d)
+
+For full analysis: ticker_options('TSLA')
 
 Output: BBG Lite formatted text (dense, scannable, professional).
 """,
@@ -147,14 +152,19 @@ Output: BBG Lite formatted text (dense, scannable, professional).
         Tool(
             name="ticker_options",
             description="""
-Options chain analysis screen - positioning, IV structure, vol skew, term structure.
+Options chain analysis screen - comprehensive positioning, IV, Greeks, unusual activity.
 
-Shows:
-- Positioning: Put/Call ratio (OI, volume), sentiment (bullish/bearish/neutral)
-- Top strikes: Largest OI positions for calls and puts
-- IV structure: ATM IV for calls/puts, spread (unusual patterns)
-- Vol skew: OTM vs ATM (panic premium detection)
-- Term structure: Near/mid/far IV, contango (compression expectations)
+Shows EVERYTHING:
+- Positioning: P/C ratio (OI + volume), ITM/OTM breakdown, sentiment
+- Top Strikes: Top 10 by OI (with volume), calls and puts side-by-side
+- IV Structure: ATM IV calls/puts, spread analysis
+- Vol Skew: OTM vs ATM (panic premium detection)
+- Term Structure: Near/mid/far IV, contango analysis
+- Volume Analysis: P/C volume ratio, unusual activity detection
+- Max Pain: Strike with most option seller pain
+- Unusual Activity: Strikes with volume > 2x OI (flags + top examples)
+- Historical IV: 30-day hist vol, 52-week IV range, IV rank percentile
+- All Expirations: Summary of all available expirations with IV/OI/volume
 - Interpretation: Context insights (NO recommendations)
 
 Input:

@@ -75,7 +75,7 @@ Shows:
 
 Parameters: `symbol` as string or array
 
-**Single mode** (`'TSLA'`): Full analysis with factor exposures, valuation, technicals, calendar, options
+**Single mode** (`'TSLA'`): Full analysis with factor exposures, valuation, technicals, calendar, options summary
 
 **Batch mode** (`['TSLA', 'F', 'GM']`): Side-by-side comparison table
 
@@ -85,24 +85,30 @@ Displays:
 - Calendar (Earnings, Ex-Div, Div Payment)
 - Momentum & Technicals (1W, 1M, 1Y, 50-day MA, 200-day MA, RSI)
 - 52-week range with visual bar
-- Options Analysis (P/C ratio, top strikes, IV structure, vol skew, term structure, interpretation)
+- Options Positioning Summary (P/C ratio, ATM IV, nearest expiration, pointer to ticker_options for full analysis)
 
 ### ticker_options(symbol, expiration='nearest')
-**Options chain analysis - positioning and IV structure**
+**Options chain analysis - comprehensive positioning, IV, volume, and unusual activity**
 
 Parameters:
 - `symbol` (e.g., 'PALL', 'AAPL')
 - `expiration` (optional): 'nearest' or 'YYYY-MM-DD'
 
-Shows:
-- **Positioning**: P/C ratio (OI, volume), sentiment
-- **Top strikes**: Largest OI positions (side-by-side table)
-- **IV structure**: ATM IV for calls/puts, spread
-- **Vol skew**: OTM vs ATM (panic premium detection)
-- **Term structure**: Near/mid/far IV, contango
-- **Interpretation**: Context insights (NO recommendations)
+Shows EVERYTHING:
+- **Positioning (OI)**: P/C ratio, total OI, sentiment, ITM/OTM breakdown with percentages
+- **Top Strikes by OI**: Top 10 calls/puts with OI, volume, last price, IV (side-by-side table)
+- **Top Strikes by Volume**: Top 10 calls/puts with volume > OI (identifies new positions)
+- **IV Structure**: ATM IV for calls/puts, spread analysis, richness indicators
+- **Vol Skew**: OTM vs ATM (panic premium detection, asymmetry)
+- **Term Structure**: Near/mid/far IV, contango analysis (vol compression expectations)
+- **Volume Analysis**: P/C volume ratio, sentiment, comparison with OI positioning
+- **Max Pain**: Strike minimizing option seller losses, current price vs max pain
+- **Unusual Activity**: Flags strikes with volume > 2x OI, top examples with ratios
+- **Historical IV Context**: 30-day historical volatility, 52-week IV range, IV rank percentile
+- **All Expirations**: Summary table of all available expirations with IV/OI/volume
+- **Interpretation**: Context insights based on data patterns (NO recommendations)
 
-**Navigation:** Used from ticker() for detailed options analysis, or directly.
+**Navigation:** Used from ticker() for detailed options analysis (ticker shows brief summary), or directly.
 
 ## Core Principles
 
@@ -160,19 +166,20 @@ momentum_1w = ((current_price - price_1w_ago) / price_1w_ago * 100)
 **Screen data fetchers:**
 - `get_markets_data()` → Fetch all market data
 - `get_sector_data(name)` → Fetch sector ETF + holdings
-- `get_ticker_screen_data(symbol)` → Fetch comprehensive ticker data (includes options)
+- `get_ticker_screen_data(symbol)` → Fetch comprehensive ticker data (includes 1W momentum and options summary)
 - `get_ticker_screen_data_batch(symbols)` → Batch fetch for comparison
-- `get_options_data(symbol, expiration)` → Fetch options chain
+- `get_options_data(symbol, expiration)` → Fetch comprehensive options chain (OI, volume, ITM/OTM, max pain, unusual activity, historical IV, all expirations)
 
 **Screen formatters (BBG Lite):**
 - `format_markets(data)` → Market overview screen
 - `format_sector(data)` → Sector drill-down screen
-- `format_ticker(data)` → Single ticker screen (includes options analysis)
+- `format_ticker(data)` → Single ticker screen (includes options positioning summary)
 - `format_ticker_batch(data_list)` → Batch comparison screen
-- `format_options(data)` → Options analysis screen
+- `format_options(data)` → Comprehensive options analysis screen (OI, volume, max pain, unusual activity, historical IV, all expirations)
+- `format_options_summary(data)` → Brief options summary for ticker() screen (P/C ratio, ATM IV, nearest expiration)
 
 **Calculations:**
-- `calculate_momentum(symbol)` → 1W, 1M, 1Y trailing returns (optimized)
+- `calculate_momentum(symbol)` → 1W, 1M, 1Y trailing returns (optimized narrow window fetching)
 - `calculate_idio_vol(symbol)` → Idiosyncratic volatility (parallel fetch)
 - `calculate_rsi(prices, period=14)` → RSI calculation
 - `is_market_open()` → US market hours detection
