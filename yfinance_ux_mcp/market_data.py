@@ -1288,11 +1288,16 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
         lines.append(f"Low              {fifty_two_low:7.2f}")
 
         # Visual bar showing position in range
-        range_pct = ((price - fifty_two_low) / (fifty_two_high - fifty_two_low)) * 100
-        bar_width = 20
-        filled = int((range_pct / 100) * bar_width)
-        bar = "=" * filled + "░" * (bar_width - filled)
-        lines.append(f"Current          {price:7.2f}  [{bar}]  {range_pct:.0f}% of range")
+        range_width = fifty_two_high - fifty_two_low
+        if range_width > 0:
+            range_pct = ((price - fifty_two_low) / range_width) * 100
+            bar_width = 20
+            filled = int((range_pct / 100) * bar_width)
+            bar = "=" * filled + "░" * (bar_width - filled)
+            lines.append(f"Current          {price:7.2f}  [{bar}]  {range_pct:.0f}% of range")
+        else:
+            # Same high and low (no range)
+            lines.append(f"Current          {price:7.2f}  [flat - no range]")
         lines.append("")
 
     # Options Positioning (brief summary)
