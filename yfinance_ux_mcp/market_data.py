@@ -2080,14 +2080,18 @@ def format_options(data: dict[str, Any]) -> str:  # noqa: PLR0915, PLR0912
                 strike = row["strike"]
                 vol = int(row["volume"])
                 oi = int(row["openInterest"])
-                lines.append(f"  ${strike:.0f}  Vol:{vol:,}  OI:{oi:,}  Ratio:{vol/oi:.1f}x")
+                ratio = (vol / oi) if oi > 0 else float("inf")
+                ratio_str = f"{ratio:.1f}x" if ratio != float("inf") else "N/A"
+                lines.append(f"  ${strike:.0f}  Vol:{vol:,}  OI:{oi:,}  Ratio:{ratio_str}")
         if len(unusual_puts) > 0:
             lines.append("Top Unusual Puts:")
             for _, row in unusual_puts.nlargest(3, "volume").iterrows():
                 strike = row["strike"]
                 vol = int(row["volume"])
                 oi = int(row["openInterest"])
-                lines.append(f"  ${strike:.0f}  Vol:{vol:,}  OI:{oi:,}  Ratio:{vol/oi:.1f}x")
+                ratio = (vol / oi) if oi > 0 else float("inf")
+                ratio_str = f"{ratio:.1f}x" if ratio != float("inf") else "N/A"
+                lines.append(f"  ${strike:.0f}  Vol:{vol:,}  OI:{oi:,}  Ratio:{ratio_str}")
         lines.append("")
     else:
         lines.extend([
