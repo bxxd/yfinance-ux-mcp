@@ -4,13 +4,15 @@ Testable independently of MCP protocol layer
 """
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-import numpy as np
 import yfinance as yf  # type: ignore[import-untyped]
 
+from mcp_yfinance_ux.calculations.momentum import calculate_momentum
+from mcp_yfinance_ux.calculations.technical import calculate_rsi
+from mcp_yfinance_ux.calculations.volatility import calculate_idio_vol
 from mcp_yfinance_ux.common.constants import (
     BETA_HIGH_THRESHOLD,
     BETA_LOW_THRESHOLD,
@@ -31,125 +33,6 @@ from mcp_yfinance_ux.common.dates import (
     is_market_open,
 )
 from mcp_yfinance_ux.common.symbols import normalize_ticker_symbol
-from mcp_yfinance_ux.historical import fetch_price_at_date, fetch_ticker_and_market
-
-
-def calculate_momentum(symbol: str) -> dict[str, float | None]:
-    """
-    Calculate trailing returns (1W, 1M, 1Y) for momentum analysis
-
-    Uses fast_info for current price + narrow window fetches for precise lookback dates
-    Fetches ~22 days total vs 252 days (91% reduction)
-    """
-    try:
-        ticker = yf.Ticker(symbol)
-
-        # Get current price from fast_info (no fetch!)
-        current_price = ticker.fast_info.get("lastPrice")
-        if current_price is None:
-            return {"momentum_1w": None, "momentum_1m": None, "momentum_1y": None}
-
-        # Calculate target dates for precise lookback
-        now = datetime.now(ZoneInfo("America/New_York"))
-        date_1y_ago = now - timedelta(days=365)
-        date_1m_ago = now - timedelta(days=30)
-        date_1w_ago = now - timedelta(days=7)
-
-        # Fetch prices at specific dates (narrow windows, ~7-8 days each)
-        price_1y_ago = fetch_price_at_date(symbol, date_1y_ago)
-        price_1m_ago = fetch_price_at_date(symbol, date_1m_ago)
-        price_1w_ago = fetch_price_at_date(symbol, date_1w_ago)
-
-        # Calculate momentum
-        momentum_1y = (
-            ((current_price - price_1y_ago) / price_1y_ago * 100)
-            if price_1y_ago else None
-        )
-        momentum_1m = (
-            ((current_price - price_1m_ago) / price_1m_ago * 100)
-            if price_1m_ago else None
-        )
-        momentum_1w = (
-            ((current_price - price_1w_ago) / price_1w_ago * 100)
-            if price_1w_ago else None
-        )
-
-        return {
-            "momentum_1w": momentum_1w,
-            "momentum_1m": momentum_1m,
-            "momentum_1y": momentum_1y,
-        }
-    except Exception:
-        return {"momentum_1w": None, "momentum_1m": None, "momentum_1y": None}
-
-
-def calculate_rsi(prices: Any, period: int = RSI_PERIOD) -> float | None:  # noqa: ANN401
-    """Calculate RSI (Relative Strength Index) for a price series"""
-    try:
-        # Calculate price changes
-        delta = prices.diff()
-
-        # Separate gains and losses
-        gain = delta.where(delta > 0, 0)
-        loss = -delta.where(delta < 0, 0)
-
-        # Calculate average gains and losses
-        avg_gain = gain.rolling(window=period).mean()
-        avg_loss = loss.rolling(window=period).mean()
-
-        # Calculate RS and RSI
-        rs = avg_gain / avg_loss
-        rsi = 100 - (100 / (1 + rs))
-
-        # Return most recent RSI value
-        return float(rsi.iloc[-1]) if not np.isnan(rsi.iloc[-1]) else None
-    except Exception:
-        return None
-
-
-def calculate_idio_vol(symbol: str) -> dict[str, float | None]:
-    """Calculate idiosyncratic volatility (stock-specific risk after removing market exposure)"""
-    try:
-        # Fetch ticker and market data in parallel (12 months)
-        hist_ticker, hist_market = fetch_ticker_and_market(symbol, months=12)
-
-        min_history_len = 30
-        if hist_ticker.empty or hist_market.empty:
-            return {"idio_vol": None, "total_vol": None}
-
-        if len(hist_ticker) < min_history_len or len(hist_market) < min_history_len:
-            return {"idio_vol": None, "total_vol": None}
-
-        # Calculate daily returns
-        ticker_returns = hist_ticker["Close"].pct_change().dropna()
-        market_returns = hist_market["Close"].pct_change().dropna()
-
-        # Align dates (intersection)
-        common_dates = ticker_returns.index.intersection(market_returns.index)
-        ticker_returns = ticker_returns.loc[common_dates]
-        market_returns = market_returns.loc[common_dates]
-
-        if len(ticker_returns) < min_history_len:
-            return {"idio_vol": None, "total_vol": None}
-
-        # Total volatility (annualized)
-        total_vol = float(ticker_returns.std() * np.sqrt(252) * 100)  # Convert to percentage
-
-        # Linear regression: decompose returns into market (beta) and stock-specific (alpha)
-        beta, alpha = np.polyfit(market_returns, ticker_returns, 1)
-
-        # Residuals = idiosyncratic component (stock-specific risk)
-        residuals = ticker_returns - (alpha + beta * market_returns)
-
-        # Idiosyncratic volatility (annualized)
-        idio_vol = float(residuals.std() * np.sqrt(252) * 100)  # Convert to percentage
-
-        return {
-            "idio_vol": idio_vol,
-            "total_vol": total_vol,
-        }
-    except Exception:
-        return {"idio_vol": None, "total_vol": None}
 
 
 def get_ticker_data(symbol: str, include_momentum: bool = False) -> dict[str, Any]:
