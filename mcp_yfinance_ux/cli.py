@@ -32,6 +32,7 @@ from .market_data import (
     get_options_data,
     get_sector_data,
     get_ticker_screen_data,
+    get_ticker_screen_data_batch,
 )
 from .server import list_tools
 
@@ -83,8 +84,8 @@ def ticker_command(symbols: list[str]) -> int:
         output = format_ticker(data)
         print(output)
     else:
-        # Batch comparison mode
-        data_list = [get_ticker_screen_data(sym) for sym in symbols]
+        # Batch comparison mode - use batch API (same as MCP server)
+        data_list = get_ticker_screen_data_batch(symbols)
         output = format_ticker_batch(data_list)
         print(output)
     return 0

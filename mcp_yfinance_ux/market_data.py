@@ -35,15 +35,40 @@ def normalize_ticker_symbol(symbol: str) -> str:
     """
     Normalize ticker symbol to Yahoo Finance format.
 
-    Yahoo Finance uses hyphens (-) for share classes and special securities:
-    - BRK.B or BRK/B → BRK-B (Berkshire Hathaway Class B)
-    - BRK.A or BRK/A → BRK-A (Berkshire Hathaway Class A)
+    Exchange suffixes (keep dots):
+    - NEO.TO → NEO.TO (Toronto Stock Exchange)
+    - 0700.HK → 0700.HK (Hong Kong)
+    - RIO.L → RIO.L (London)
+    - BHP.AX → BHP.AX (Australia)
+
+    Share classes (convert to hyphens):
+    - BRK.B or BRK/B → BRK-B (Berkshire Class B)
+    - BRK.A or BRK/A → BRK-A (Berkshire Class A)
     - BAC.PL or BAC/PL → BAC-PL (Preferred stock)
 
-    Other providers use periods or slashes, but Yahoo standardized on hyphens.
-    Period (.) is reserved for international exchanges (e.g., 0700.HK for Hong Kong).
+    Heuristic:
+    - If dot followed by 2+ uppercase chars: exchange suffix (keep dot)
+    - If dot followed by 1-2 chars at end: share class (replace with dash)
     """
-    return symbol.replace(".", "-").replace("/", "-")
+    # Replace slashes with hyphens first
+    symbol = symbol.replace("/", "-")
+
+    # Check if this is an exchange suffix (dot followed by 2+ uppercase chars)
+    # Common exchange suffixes: .TO, .HK, .L, .AX, .PA, .DE, .SW, etc.
+    if "." in symbol:
+        parts = symbol.split(".")
+        # Exchange suffixes are exactly 2 parts, with suffix being 2+ uppercase chars
+        if (
+            len(parts) == 2  # noqa: PLR2004
+            and len(parts[1]) >= 2  # noqa: PLR2004
+            and parts[1].isupper()
+        ):
+            # Exchange suffix - keep the dot
+            return symbol
+        # Share class - replace dot with dash
+        return symbol.replace(".", "-")
+
+    return symbol
 
 # Category to symbol mappings (for get_market_snapshot)
 # Aligned with Paleologo factor framework
@@ -1130,6 +1155,7 @@ def get_ticker_screen_data_batch(symbols: list[str]) -> list[dict[str, Any]]:
                 "two_hundred_day_avg": two_hundred_day_avg,
                 "fifty_two_week_high": fifty_two_week_high,
                 "fifty_two_week_low": fifty_two_week_low,
+                "momentum_1w": momentum.get("momentum_1w"),
                 "momentum_1m": momentum.get("momentum_1m"),
                 "momentum_1y": momentum.get("momentum_1y"),
                 "idio_vol": vol_data.get("idio_vol"),
@@ -1345,7 +1371,8 @@ def format_ticker_batch(data_list: list[dict[str, Any]]) -> str:
     # Header
     header = (
         f"{'SYMBOL':8} {'NAME':30} {'PRICE':>10} {'CHG%':>8} "
-        f"{'BETA':>6} {'IDIO':>6} {'MOM1Y':>8} {'P/E':>8} {'DIV%':>6} {'RSI':>6}"
+        f"{'BETA':>6} {'IDIO':>6} {'MOM1W':>8} {'MOM1M':>8} {'MOM1Y':>8} "
+        f"{'P/E':>8} {'DIV%':>6} {'RSI':>6}"
     )
     lines.append(header)
     lines.append("-" * len(header))
@@ -1363,6 +1390,8 @@ def format_ticker_batch(data_list: list[dict[str, Any]]) -> str:
         change_pct = data.get("change_percent")
         beta_spx = data.get("beta_spx")
         idio_vol = data.get("idio_vol")
+        mom_1w = data.get("momentum_1w")
+        mom_1m = data.get("momentum_1m")
         mom_1y = data.get("momentum_1y")
         trailing_pe = data.get("trailing_pe")
         div_yield = data.get("dividend_yield")
@@ -1373,14 +1402,17 @@ def format_ticker_batch(data_list: list[dict[str, Any]]) -> str:
         chg_str = f"{change_pct:+7.2f}%" if change_pct is not None else " " * 8
         beta_str = f"{beta_spx:6.2f}" if beta_spx is not None else " " * 6
         idio_str = f"{idio_vol:5.1f}%" if idio_vol is not None else " " * 6
-        mom_str = f"{mom_1y:+7.1f}%" if mom_1y is not None else " " * 8
+        mom_1w_str = f"{mom_1w:+7.1f}%" if mom_1w is not None else " " * 8
+        mom_1m_str = f"{mom_1m:+7.1f}%" if mom_1m is not None else " " * 8
+        mom_1y_str = f"{mom_1y:+7.1f}%" if mom_1y is not None else " " * 8
         pe_str = f"{trailing_pe:8.2f}" if trailing_pe is not None else " " * 8
         div_str = f"{div_yield:5.2f}%" if div_yield is not None else " " * 6
         rsi_str = f"{rsi:6.1f}" if rsi is not None else " " * 6
 
         line = (
             f"{symbol:8} {name:30} {price_str} {chg_str} "
-            f"{beta_str} {idio_str} {mom_str} {pe_str} {div_str} {rsi_str}"
+            f"{beta_str} {idio_str} {mom_1w_str} {mom_1m_str} {mom_1y_str} "
+            f"{pe_str} {div_str} {rsi_str}"
         )
         lines.append(line)
     lines.append("")
