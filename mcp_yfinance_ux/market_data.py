@@ -472,14 +472,25 @@ def get_ticker_full_data(symbol: str) -> dict[str, Any]:
     try:
         ticker = yf.Ticker(symbol)
 
-        # Use fast_info instead of info (much faster - no full data fetch)
-        price = ticker.fast_info.get("lastPrice")
-        prev_close = ticker.fast_info.get("previousClose")
+        # Futures require special handling - fast_info.previousClose is wrong reference
+        # Futures trade 24/7, so we need ticker.info.regularMarketChangePercent which
+        # uses the correct 6pm ET settlement price as baseline
+        is_futures = symbol.endswith("=F")
 
-        # Calculate change percent from fast_info data
-        change_pct = None
-        if price is not None and prev_close is not None and prev_close != 0:
-            change_pct = ((price - prev_close) / prev_close) * 100
+        if is_futures:
+            # Use info for futures (slower but accurate)
+            info = ticker.info
+            price = info.get("regularMarketPrice") or info.get("currentPrice")
+            change_pct = info.get("regularMarketChangePercent")
+        else:
+            # Use fast_info for equities/ETFs (faster)
+            price = ticker.fast_info.get("lastPrice")
+            prev_close = ticker.fast_info.get("previousClose")
+
+            # Calculate change percent from fast_info data
+            change_pct = None
+            if price is not None and prev_close is not None and prev_close != 0:
+                change_pct = ((price - prev_close) / prev_close) * 100
 
         # Get momentum (already optimized with narrow windows)
         momentum = calculate_momentum(symbol)
