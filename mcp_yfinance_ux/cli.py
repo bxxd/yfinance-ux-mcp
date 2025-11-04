@@ -119,6 +119,8 @@ Examples:
   %(prog)s ticker TSLA                # Single ticker (detailed)
   %(prog)s ticker TSLA F GM           # Batch comparison (table)
   %(prog)s news TSLA                  # News for ticker
+  %(prog)s options PALL               # Options analysis (nearest expiration)
+  %(prog)s options PALL 2025-12-20    # Options for specific expiration
         """
     )
 
