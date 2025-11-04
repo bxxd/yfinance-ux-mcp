@@ -1,4 +1,4 @@
-# yfinance-ux-mcp
+# mcp-yfinance-ux
 
 **For AI agents:** Market data in Bloomberg Terminal format. Not raw JSON - I give you formatted tables you can read directly. Navigate like BBG: `markets()` → `sector('technology')` → `ticker('AAPL')` → `news('AAPL')`. Smart defaults (auto-detects market hours), progressive disclosure (summary → detail).
 
@@ -90,8 +90,8 @@ This MCP server is a **research tool for occasional queries**, not production in
 ### 1. Clone and install dependencies
 
 ```bash
-git clone https://github.com/bxxd/idio-yfinance-ux-mcp.git
-cd idio-yfinance-ux-mcp
+git clone https://github.com/bxxd/idio-mcp-yfinance-ux.git
+cd idio-mcp-yfinance-ux
 poetry install
 ```
 
@@ -104,7 +104,7 @@ poetry install
 From your project directory:
 
 ```bash
-claude mcp add idio-yf make -C /absolute/path/to/yfinance-ux-mcp serve
+claude mcp add idio-yf make -C /absolute/path/to/mcp-yfinance-ux serve
 ```
 
 Or manually add to `~/.claude.json` under your project's `mcpServers`:
@@ -117,7 +117,7 @@ Or manually add to `~/.claude.json` under your project's `mcpServers`:
         "idio-yf": {
           "type": "stdio",
           "command": "make",
-          "args": ["-C", "/absolute/path/to/yfinance-ux-mcp", "serve"],
+          "args": ["-C", "/absolute/path/to/mcp-yfinance-ux", "serve"],
           "env": {}
         }
       }
@@ -137,7 +137,7 @@ Or manually add to `~/.claude.json` under your project's `mcpServers`:
 If you prefer not to use make:
 
 ```bash
-claude mcp add idio-yf poetry run python -m yfinance_ux_mcp.server --cwd /path/to/yfinance-ux-mcp
+claude mcp add idio-yf poetry run python -m mcp_yfinance_ux.server --cwd /path/to/mcp-yfinance-ux
 ```
 
 Or manually:
@@ -150,8 +150,8 @@ Or manually:
         "idio-yf": {
           "type": "stdio",
           "command": "poetry",
-          "args": ["run", "python", "-m", "yfinance_ux_mcp.server"],
-          "cwd": "/absolute/path/to/yfinance-ux-mcp",
+          "args": ["run", "python", "-m", "mcp_yfinance_ux.server"],
+          "cwd": "/absolute/path/to/mcp-yfinance-ux",
           "env": {}
         }
       }

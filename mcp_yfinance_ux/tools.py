@@ -181,12 +181,12 @@ Calls:  4,598 OI
 Puts:   2,617 OI
 P/C Ratio:  0.57    ← BULLISH (calls 1.8x puts)
 
-TOP POSITIONS BY STRIKE
-CALLS                                   PUTS
-Strike    OI     Last      IV          Strike    OI     Last      IV
-────────────────────────────────────   ──────────────────────────────────────
-$160    1,173    $ 1.07     60.8%       $115      494    $ 2.04     50.8%
-$150      898    $ 1.81     63.5%       $116      451    $ 2.63     50.4%
+TOP POSITIONS BY OI (Top 10)
+CALLS                                            PUTS
+Strike    OI      Vol     Last      IV           Strike    OI      Vol     Last      IV
+──────────────────────────────────────────────   ──────────────────────────────────────────────
+$160      1,173      10   $ 1.07    60.8%          $115        494       4   $ 2.04     50.8%
+$150        898      43   $ 1.81    63.5%          $116        451       1   $ 2.63     50.4%
 
 IMPLIED VOLATILITY
 ATM Calls:     55.5%

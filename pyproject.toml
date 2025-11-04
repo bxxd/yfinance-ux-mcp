@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "yfinance-ux-mcp"
+name = "mcp-yfinance-ux"
 version = "0.1.0"
 description = "Yahoo Finance MCP server with agent-friendly UX. BBG Lite formatted screens, smart defaults, progressive disclosure."
 authors = ["bxxd <bxxd@users.noreply.github.com>"]
@@ -12,7 +12,7 @@ yfinance = "^0.2.48"
 mcp = "^1.1.2"
 
 [tool.poetry.scripts]
-yfinance-ux-mcp = "yfinance_ux_mcp.server:main"
+mcp-yfinance-ux = "mcp_yfinance_ux.server:main"
 
 [build-system]
 requires = ["poetry-core"]

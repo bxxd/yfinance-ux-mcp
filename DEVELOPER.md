@@ -22,12 +22,12 @@ make logs       # Tail server logs
 ## Architecture
 
 **Clean separation:**
-- `yfinance_ux_mcp/market_data.py` - Business logic (zero MCP dependencies)
-- `yfinance_ux_mcp/tools.py` - MCP tool definitions (single source of truth)
-- `yfinance_ux_mcp/server.py` - MCP protocol wrapper, stdio transport (for local CLI)
-- `yfinance_ux_mcp/server_http.py` - MCP protocol wrapper, SSE/HTTP transport (for alpha-server)
-- `yfinance_ux_mcp/historical.py` - Optimized data fetching
-- `yfinance_ux_mcp/cli.py` - CLI for testing
+- `mcp_yfinance_ux/market_data.py` - Business logic (zero MCP dependencies)
+- `mcp_yfinance_ux/tools.py` - MCP tool definitions (single source of truth)
+- `mcp_yfinance_ux/server.py` - MCP protocol wrapper, stdio transport (for local CLI)
+- `mcp_yfinance_ux/server_http.py` - MCP protocol wrapper, SSE/HTTP transport (for alpha-server)
+- `mcp_yfinance_ux/historical.py` - Optimized data fetching
+- `mcp_yfinance_ux/cli.py` - CLI for testing
 
 **No MCP in business logic. Protocol layer is just routing.**
 
@@ -234,8 +234,8 @@ make test
 ## File Structure
 
 ```
-yfinance-ux-mcp/
-├── yfinance_ux_mcp/          # Core package (all app code)
+mcp-yfinance-ux/
+├── mcp_yfinance_ux/          # Core package (all app code)
 │   ├── server.py             # MCP protocol wrapper
 │   ├── market_data.py        # Business logic (no MCP deps)
 │   ├── historical.py         # Optimized data fetching

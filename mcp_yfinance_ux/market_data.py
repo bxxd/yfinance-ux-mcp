@@ -1894,9 +1894,9 @@ def format_options(data: dict[str, Any]) -> str:  # noqa: PLR0915, PLR0912
     lines.extend(
         [
             "TOP POSITIONS BY OI (Top 10)",
-            "CALLS                                               PUTS",
-            "Strike    OI      Vol     Last      IV          Strike    OI      Vol     Last      IV",  # noqa: E501
-            "───────────────────────────────────────────────   ───────────────────────────────────────────────",  # noqa: E501
+            "CALLS                                            PUTS",
+            "Strike    OI      Vol     Last      IV           Strike    OI      Vol     Last      IV",  # noqa: E501
+            "──────────────────────────────────────────────   ──────────────────────────────────────────────",  # noqa: E501
         ]
     )
 
@@ -1914,7 +1914,7 @@ def format_options(data: dict[str, Any]) -> str:  # noqa: PLR0915, PLR0912
             vol = int(c["volume"])
             last = c["lastPrice"]
             iv = c["impliedVolatility"] * 100
-            call_line = f"${strike:.0f}   {oi:>6,}  {vol:>6,}    ${last:>5.2f}    {iv:>5.1f}%"
+            call_line = f"${strike:<5.0f}  {oi:>7,} {vol:>7,}   ${last:>5.2f}   {iv:>5.1f}%"
 
         put_line = ""
         if i < len(top_puts_oi):
@@ -1924,9 +1924,9 @@ def format_options(data: dict[str, Any]) -> str:  # noqa: PLR0915, PLR0912
             vol = int(p["volume"])
             last = p["lastPrice"]
             iv = p["impliedVolatility"] * 100
-            put_line = f"${strike:.0f}   {oi:>6,}  {vol:>6,}    ${last:>5.2f}    {iv:>5.1f}%"
+            put_line = f"${strike:<5.0f}  {oi:>7,} {vol:>7,}   ${last:>5.2f}   {iv:>5.1f}%"
 
-        lines.append(f"{call_line:<55} {put_line}")
+        lines.append(f"{call_line:<46}   {put_line}")
 
     lines.append("")
 
