@@ -1,8 +1,14 @@
 # Refactor Remaining Work
 
-**Status**: Phase 1 complete (constants extracted)
+**Status**: Phases 1-3 complete (constants, common utilities, calculations extracted)
 **Branch**: `refactor/separate-concerns`
-**Progress**: 1 of 6 phases complete
+**Progress**: 3 of 6 phases complete
+
+**Overall Progress:**
+- Original: 2,221 lines
+- Current: 1,789 lines
+- Reduction: 432 lines (19.4%)
+- Remaining: ~800-1,000 lines to extract (services + formatters)
 
 ---
 
@@ -19,7 +25,39 @@
 
 ---
 
-## 🚧 Phase 2: Common Utilities (TODO)
+## ✅ Phase 2: Common Utilities (COMPLETE)
+
+**What was done:**
+- Created `common/dates.py` with 6 market hours functions (~94 lines)
+- Created `common/symbols.py` with normalize_ticker_symbol() (~38 lines)
+- Reduced market_data.py: 2,045 → 1,913 lines (-132 lines)
+- All market hours detection working (US, Europe, Asia, futures)
+- Symbol normalization tested (exchange suffixes vs share classes)
+
+**Files:**
+- `common/dates.py` - Market hours utilities (is_market_open, get_market_status, etc.)
+- `common/symbols.py` - Ticker symbol normalization (NEO.TO vs BRK-B)
+
+---
+
+## ✅ Phase 3: Calculations (COMPLETE)
+
+**What was done:**
+- Created `calculations/momentum.py` with calculate_momentum() (~60 lines)
+- Created `calculations/technical.py` with calculate_rsi() (~35 lines)
+- Created `calculations/volatility.py` with calculate_idio_vol() (~58 lines)
+- Reduced market_data.py: 1,913 → 1,789 lines (-124 lines)
+- All calculations working: momentum (1W/1M/1Y), RSI, idio vol, beta
+- Tested in both single and batch ticker modes
+
+**Files:**
+- `calculations/momentum.py` - 1W/1M/1Y trailing returns (optimized narrow window fetching)
+- `calculations/technical.py` - RSI calculation
+- `calculations/volatility.py` - Idiosyncratic volatility via factor regression
+
+---
+
+## 🚧 Phase 2: Common Utilities (TODO - SKIP, COMPLETED ABOVE)
 
 ### 2.1 Extract `common/dates.py`
 
@@ -59,7 +97,7 @@
 
 ---
 
-## 🚧 Phase 3: Calculations (TODO)
+## 🚧 Phase 3: Calculations (TODO - SKIP, COMPLETED ABOVE)
 
 ### Extract `calculations/momentum.py`
 
