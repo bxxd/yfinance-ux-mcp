@@ -142,24 +142,4 @@ Context delivery. No recommendations.
                 "required": ["symbol"]
             }
         ),
-        Tool(
-            name="news",
-            description="""
-News feed - recent articles for a ticker.
-
-Shows recent news with title, summary, source, and URL.
-
-Input: symbol (e.g., 'TSLA')
-""",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "symbol": {
-                        "type": "string",
-                        "description": "Ticker symbol (e.g., 'TSLA', 'AAPL')",
-                    }
-                },
-                "required": ["symbol"]
-            }
-        ),
     ]

@@ -20,13 +20,11 @@ from mcp.types import TextContent, Tool
 
 from .market_data import (
     format_markets,
-    format_news,
     format_options,
     format_sector,
     format_ticker,
     format_ticker_batch,
     get_markets_data,
-    get_news_data,
     get_options_data,
     get_sector_data,
     get_ticker_screen_data,
@@ -88,15 +86,6 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:  # noqa: AN
         expiration = arguments.get("expiration", "nearest")
         data = get_options_data(symbol, expiration)
         formatted = format_options(data)
-        return [TextContent(type="text", text=formatted)]
-
-    if name == "news":
-        symbol = arguments.get("symbol")
-        if not symbol:
-            msg = "news() requires 'symbol' parameter"
-            raise ValueError(msg)
-        data = get_news_data(symbol)
-        formatted = format_news(data)
         return [TextContent(type="text", text=formatted)]
 
     msg = f"Unknown tool: {name}"

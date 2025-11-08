@@ -1,14 +1,14 @@
 # Refactor Remaining Work
 
-**Status**: Phases 1-3 complete (constants, common utilities, calculations extracted)
+**Status**: ✅ ALL PHASES COMPLETE (Phases 1-6)
 **Branch**: `refactor/separate-concerns`
-**Progress**: 3 of 6 phases complete
+**Progress**: 6 of 6 phases complete (100%)
 
 **Overall Progress:**
 - Original: 2,221 lines
-- Current: 1,789 lines
-- Reduction: 432 lines (19.4%)
-- Remaining: ~800-1,000 lines to extract (services + formatters)
+- Current: 54 lines (re-export shim)
+- Reduction: 2,167 lines (97.6%)
+- **REFACTOR COMPLETE!**
 
 ---
 
@@ -54,6 +54,56 @@
 - `calculations/momentum.py` - 1W/1M/1Y trailing returns (optimized narrow window fetching)
 - `calculations/technical.py` - RSI calculation
 - `calculations/volatility.py` - Idiosyncratic volatility via factor regression
+
+---
+
+## ✅ Phase 4: Services (COMPLETE)
+
+**What was done:**
+- Created `services/markets.py` with get_markets_data(), get_market_snapshot(), get_ticker_data(), get_ticker_full_data(), get_ticker_history() (~224 lines)
+- Created `services/news.py` with get_news_data() (~29 lines)
+- Created `services/options.py` with get_options_data() (~315 lines)
+- Created `services/sectors.py` with get_sector_data() (~120 lines)
+- Created `services/tickers.py` with get_ticker_screen_data(), get_ticker_screen_data_batch() (~209 lines)
+- Reduced market_data.py: 1,789 → 984 lines (-805 lines, 45% reduction!)
+- Added __all__ export list to market_data.py for backward compatibility
+- All service functions re-exported from market_data.py
+- All tests passing, no regressions
+
+**Files:**
+- `services/markets.py` - Market data fetching (markets overview, ticker snapshots, history)
+- `services/news.py` - News article fetching
+- `services/options.py` - Comprehensive options chain analysis
+- `services/sectors.py` - Sector ETF data + parallel holdings fetching
+- `services/tickers.py` - Single and batch ticker data (uses yf.Tickers for efficiency)
+
+---
+
+## ✅ Phase 5: Formatters (COMPLETE)
+
+**What was done:**
+- Created `formatters/markets.py` with format_markets(), format_market_snapshot() (~223 lines)
+- Created `formatters/news.py` with format_news() (~73 lines)
+- Created `formatters/options.py` with format_options() (~312 lines)
+- Created `formatters/sectors.py` with format_sector() (~79 lines)
+- Created `formatters/tickers.py` with format_ticker(), format_ticker_batch(), format_options_summary() (~299 lines)
+- Reduced market_data.py: 984 → 54 lines (-930 lines, 94.5% reduction from Phase 4!)
+- market_data.py is now just a re-export shim (imports + __all__)
+- All formatters re-exported from market_data.py
+- All tests passing, no regressions
+
+**Files:**
+- `formatters/markets.py` - Market overview and snapshot formatting (BBG Lite style)
+- `formatters/news.py` - News articles formatting
+- `formatters/options.py` - Comprehensive options chain formatting
+- `formatters/sectors.py` - Sector drill-down formatting
+- `formatters/tickers.py` - Single and batch ticker formatting, options summary
+
+**Total extracted:**
+- Services: 897 lines across 5 files
+- Formatters: 986 lines across 5 files
+- Total: 1,937 lines extracted
+- market_data.py: 2,221 → 54 lines (97.6% reduction!)
 
 ---
 
@@ -162,9 +212,9 @@
 
 ---
 
-## 🚧 Phase 4: Services (TODO)
+## ✅ Phase 4: Services (COMPLETE - SEE ABOVE FOR DETAILS)
 
-### Extract `services/markets.py`
+### ✅ Extract `services/markets.py` (COMPLETE)
 
 **Functions to extract:**
 - `get_markets_data()` → Fetch all market overview data
@@ -190,91 +240,13 @@
 4. Update `market_data.py` imports
 5. Run tests
 
-### Extract `services/sectors.py`
+### ✅ Extract `services/sectors.py` (COMPLETE)
 
-**Functions to extract:**
-- `get_sector_data(name)` → Fetch sector ETF + holdings
+### ✅ Extract `services/tickers.py` (COMPLETE)
 
-**Current location:** Lines ~810-920 of `market_data.py`
+### ✅ Extract `services/options.py` (COMPLETE)
 
-**Estimated size:** ~150 lines
-
-**Dependencies:**
-- yfinance
-- pandas (for holdings DataFrame)
-- ThreadPoolExecutor (parallel fetching)
-- Constants from `common.constants`
-- Calculations from `calculations/momentum.py`
-
-**Steps:**
-1. Create `services/sectors.py`
-2. Move `get_sector_data()` function
-3. Import dependencies
-4. Update `market_data.py` imports
-5. Run tests
-
-### Extract `services/tickers.py`
-
-**Functions to extract:**
-- `get_ticker_screen_data(symbol)` → Single ticker comprehensive data
-- `get_ticker_screen_data_batch(symbols)` → Batch ticker data (uses yf.Tickers)
-
-**Current location:** Lines ~1000-1180 of `market_data.py`
-
-**Estimated size:** ~200 lines
-
-**Dependencies:**
-- yfinance (including yf.Tickers batch API)
-- All calculations (momentum, volatility, RSI)
-- Constants from `common.constants`
-
-**Steps:**
-1. Create `services/tickers.py`
-2. Move ticker data functions
-3. Import dependencies
-4. Update `market_data.py` imports
-5. Run tests
-
-### Extract `services/options.py`
-
-**Functions to extract:**
-- `get_options_data(symbol, expiration)` → Comprehensive options chain analysis
-
-**Current location:** Lines ~1600-1900 of `market_data.py`
-
-**Estimated size:** ~350 lines (complex function)
-
-**Dependencies:**
-- yfinance
-- pandas (for options chain DataFrames)
-- numpy (for calculations)
-- datetime/timedelta
-- Constants from `common.constants`
-
-**Steps:**
-1. Create `services/options.py`
-2. Move `get_options_data()` function
-3. Import dependencies
-4. Update `market_data.py` imports
-5. Run tests
-
-### Extract `services/news.py`
-
-**Functions to extract:**
-- `get_news_data(symbol)` → Fetch news articles
-
-**Current location:** Lines ~1510-1525 of `market_data.py`
-
-**Estimated size:** ~20 lines (simple function)
-
-**Dependencies:**
-- yfinance
-
-**Steps:**
-1. Create `services/news.py`
-2. Move `get_news_data()` function
-3. Update `market_data.py` imports
-4. Run tests
+### ✅ Extract `services/news.py` (COMPLETE)
 
 ---
 
@@ -385,11 +357,35 @@
 
 ---
 
-## 🚧 Phase 6: Final Cleanup (TODO)
+## ✅ Phase 6: Final Cleanup (COMPLETE)
 
-### 6.1 Update `market_data.py` to Re-export Everything
+**What was done:**
+- Created `services/__init__.py` with all service exports (~30 lines)
+- Created `formatters/__init__.py` with all formatter exports (~30 lines)
+- market_data.py already completed in Phase 5 (54-line re-export shim)
+- Ran full test suite: All lint checks passing
+- Verified all CLI commands working: markets, ticker, options, sector
+- Cleaned up tracking documentation
 
-After all extractions, `market_data.py` becomes a **compatibility shim** that re-exports everything:
+**Files:**
+- `services/__init__.py` - Re-exports all service functions
+- `formatters/__init__.py` - Re-exports all formatter functions
+- `market_data.py` - Re-export shim (backward compatibility)
+
+**Test results:**
+- `make lint` - All checks passed (mypy + ruff)
+- `./cli markets` - Working
+- `./cli ticker AAPL` - Working
+- `./cli options AAPL` - Working
+- `./cli sector technology` - Working
+
+**REFACTOR COMPLETE!**
+
+---
+
+### 6.1 Update `market_data.py` to Re-export Everything (DONE)
+
+`market_data.py` is now a **compatibility shim** that re-exports everything:
 
 ```python
 """

@@ -1,0 +1,191 @@
+"""
+Ticker screen data services.
+
+Comprehensive ticker analysis: price, factors, valuation, technicals, calendar, options.
+Supports both single and batch fetching (batch uses yf.Tickers for efficiency).
+"""
+
+from typing import Any
+
+import yfinance as yf  # type: ignore[import-untyped]
+
+from mcp_yfinance_ux.calculations.momentum import calculate_momentum
+from mcp_yfinance_ux.calculations.technical import calculate_rsi
+from mcp_yfinance_ux.calculations.volatility import calculate_idio_vol
+from mcp_yfinance_ux.common.constants import RSI_PERIOD
+from mcp_yfinance_ux.common.symbols import normalize_ticker_symbol
+from mcp_yfinance_ux.services.options import get_options_data
+
+
+def get_ticker_screen_data(symbol: str) -> dict[str, Any]:
+    """Fetch comprehensive ticker data for ticker() screen"""
+    try:
+        symbol = normalize_ticker_symbol(symbol)
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+
+        # Basic price data
+        price = info.get("regularMarketPrice") or info.get("currentPrice")
+        change = info.get("regularMarketChange")
+        change_pct = info.get("regularMarketChangePercent")
+        market_cap = info.get("marketCap")
+        volume = info.get("volume")
+        name = info.get("longName") or info.get("shortName") or symbol
+
+        # Factor exposures
+        beta_spx = info.get("beta")
+
+        # Valuation
+        trailing_pe = info.get("trailingPE")
+        forward_pe = info.get("forwardPE")
+        dividend_yield = info.get("dividendYield")
+
+        # Technicals
+        fifty_day_avg = info.get("fiftyDayAverage")
+        two_hundred_day_avg = info.get("twoHundredDayAverage")
+        fifty_two_week_high = info.get("fiftyTwoWeekHigh")
+        fifty_two_week_low = info.get("fiftyTwoWeekLow")
+
+        # Get momentum
+        momentum = calculate_momentum(symbol)
+
+        # Get idio vol
+        vol_data = calculate_idio_vol(symbol)
+
+        # Calculate RSI
+        rsi = None
+        try:
+            hist = ticker.history(period="1mo", interval="1d")
+            if not hist.empty and len(hist) >= RSI_PERIOD:
+                rsi = calculate_rsi(hist["Close"])
+        except Exception:
+            pass
+
+        # Get calendar data (earnings and dividend dates)
+        calendar = None
+        try:  # noqa: SIM105
+            calendar = ticker.calendar
+        except Exception:
+            pass  # Calendar not available for non-stocks (indices, ETFs, etc.)
+
+        # Get options data
+        options_data = get_options_data(symbol, "nearest")
+
+        return {
+            "symbol": symbol,
+            "name": name,
+            "price": price,
+            "change": change,
+            "change_percent": change_pct,
+            "market_cap": market_cap,
+            "volume": volume,
+            "beta_spx": beta_spx,
+            "trailing_pe": trailing_pe,
+            "forward_pe": forward_pe,
+            "dividend_yield": dividend_yield,
+            "fifty_day_avg": fifty_day_avg,
+            "two_hundred_day_avg": two_hundred_day_avg,
+            "fifty_two_week_high": fifty_two_week_high,
+            "fifty_two_week_low": fifty_two_week_low,
+            "momentum_1w": momentum.get("momentum_1w"),
+            "momentum_1m": momentum.get("momentum_1m"),
+            "momentum_1y": momentum.get("momentum_1y"),
+            "idio_vol": vol_data.get("idio_vol"),
+            "total_vol": vol_data.get("total_vol"),
+            "rsi": rsi,
+            "calendar": calendar,
+            "options_data": options_data,
+        }
+    except Exception as e:
+        return {"symbol": symbol, "error": str(e)}
+
+
+def get_ticker_screen_data_batch(symbols: list[str]) -> list[dict[str, Any]]:
+    """Fetch comprehensive ticker data for multiple symbols using batch API"""
+    if not symbols:
+        return []
+
+    # Normalize all symbols
+    symbols = [normalize_ticker_symbol(s) for s in symbols]
+
+    # Batch fetch all tickers at once (single request to Yahoo, not N separate requests)
+    tickers_obj = yf.Tickers(" ".join(symbols))
+
+    results = []
+    for symbol in symbols:
+        try:
+            ticker_obj = tickers_obj.tickers[symbol]
+            info = ticker_obj.info
+
+            # Basic price data
+            price = info.get("regularMarketPrice") or info.get("currentPrice")
+            change = info.get("regularMarketChange")
+            change_pct = info.get("regularMarketChangePercent")
+            market_cap = info.get("marketCap")
+            volume = info.get("volume")
+            name = info.get("longName") or info.get("shortName") or symbol
+
+            # Factor exposures
+            beta_spx = info.get("beta")
+
+            # Valuation
+            trailing_pe = info.get("trailingPE")
+            forward_pe = info.get("forwardPE")
+            dividend_yield = info.get("dividendYield")
+
+            # Technicals
+            fifty_day_avg = info.get("fiftyDayAverage")
+            two_hundred_day_avg = info.get("twoHundredDayAverage")
+            fifty_two_week_high = info.get("fiftyTwoWeekHigh")
+            fifty_two_week_low = info.get("fiftyTwoWeekLow")
+
+            # Get momentum
+            momentum = calculate_momentum(symbol)
+
+            # Get idio vol
+            vol_data = calculate_idio_vol(symbol)
+
+            # Calculate RSI
+            rsi = None
+            try:
+                hist = ticker_obj.history(period="1mo", interval="1d")
+                if not hist.empty and len(hist) >= RSI_PERIOD:
+                    rsi = calculate_rsi(hist["Close"])
+            except Exception:
+                pass
+
+            # Get calendar data (earnings and dividend dates)
+            calendar = None
+            try:  # noqa: SIM105
+                calendar = ticker_obj.calendar
+            except Exception:
+                pass  # Calendar not available for non-stocks (indices, ETFs, etc.)
+
+            results.append({
+                "symbol": symbol,
+                "name": name,
+                "price": price,
+                "change": change,
+                "change_percent": change_pct,
+                "market_cap": market_cap,
+                "volume": volume,
+                "beta_spx": beta_spx,
+                "trailing_pe": trailing_pe,
+                "forward_pe": forward_pe,
+                "dividend_yield": dividend_yield,
+                "fifty_day_avg": fifty_day_avg,
+                "two_hundred_day_avg": two_hundred_day_avg,
+                "fifty_two_week_high": fifty_two_week_high,
+                "fifty_two_week_low": fifty_two_week_low,
+                "momentum_1w": momentum.get("momentum_1w"),
+                "momentum_1m": momentum.get("momentum_1m"),
+                "momentum_1y": momentum.get("momentum_1y"),
+                "idio_vol": vol_data.get("idio_vol"),
+                "total_vol": vol_data.get("total_vol"),
+                "rsi": rsi,
+                "calendar": calendar,
+            })
+        except Exception as e:
+            results.append({"symbol": symbol, "error": str(e)})
+
+    return results

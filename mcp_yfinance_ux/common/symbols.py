@@ -23,24 +23,29 @@ def normalize_ticker_symbol(symbol: str) -> str:
     - BAC.PL or BAC/PL → BAC-PL (Preferred stock)
 
     Heuristic:
-    - If dot followed by 2+ uppercase chars: exchange suffix (keep dot)
+    - If dot followed by known exchange suffix: keep dot
     - If dot followed by 1-2 chars at end: share class (replace with dash)
     """
     # Replace slashes with hyphens first
     symbol = symbol.replace("/", "-")
 
-    # Check if this is an exchange suffix (dot followed by 2+ uppercase chars)
-    # Common exchange suffixes: .TO, .HK, .L, .AX, .PA, .DE, .SW, etc.
+    # Check if this is an exchange suffix
+    # Common exchange suffixes: .TO, .HK, .L, .AX, .PA, .DE, .SW, .F, etc.
     if "." in symbol:
         parts = symbol.split(".")
-        # Exchange suffixes are exactly 2 parts, with suffix being 2+ uppercase chars
-        if (
-            len(parts) == 2  # noqa: PLR2004
-            and len(parts[1]) >= 2  # noqa: PLR2004
-            and parts[1].isupper()
-        ):
-            # Exchange suffix - keep the dot
-            return symbol
+        if len(parts) == 2:  # noqa: PLR2004
+            suffix = parts[1].upper()
+            # Known single-letter exchange suffixes
+            single_letter_exchanges = {"L", "F", "P"}  # London, Frankfurt, Paris
+            # Exchange suffix if:
+            # - Single uppercase letter in known set, OR
+            # - 2+ uppercase characters
+            if (
+                (len(suffix) == 1 and suffix in single_letter_exchanges)
+                or (len(suffix) >= 2 and suffix.isupper())  # noqa: PLR2004
+            ):
+                # Exchange suffix - keep the dot
+                return symbol
         # Share class - replace dot with dash
         return symbol.replace(".", "-")
 
