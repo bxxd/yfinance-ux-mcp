@@ -177,6 +177,10 @@ def get_markets_data() -> dict[str, dict[str, Any]]:
         ("stoxx50", "^STOXX50E"),
         # Global - Latin America
         ("bovespa", "^BVSP"),
+        # Crypto
+        ("btc", "BTC-USD"),
+        ("eth", "ETH-USD"),
+        ("sol", "SOL-USD"),
         # Sectors (all 11 GICS)
         ("tech", "XLK"),
         ("financials", "XLF"),
