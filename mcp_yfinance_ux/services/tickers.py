@@ -40,6 +40,10 @@ def get_ticker_screen_data(symbol: str) -> dict[str, Any]:
         forward_pe = info.get("forwardPE")
         dividend_yield = info.get("dividendYield")
 
+        # Short interest (positioning)
+        short_pct_float = info.get("shortPercentOfFloat")
+        short_ratio = info.get("shortRatio")
+
         # Technicals
         fifty_day_avg = info.get("fiftyDayAverage")
         two_hundred_day_avg = info.get("twoHundredDayAverage")
@@ -83,6 +87,8 @@ def get_ticker_screen_data(symbol: str) -> dict[str, Any]:
             "trailing_pe": trailing_pe,
             "forward_pe": forward_pe,
             "dividend_yield": dividend_yield,
+            "short_pct_float": short_pct_float,
+            "short_ratio": short_ratio,
             "fifty_day_avg": fifty_day_avg,
             "two_hundred_day_avg": two_hundred_day_avg,
             "fifty_two_week_high": fifty_two_week_high,
@@ -133,6 +139,10 @@ def get_ticker_screen_data_batch(symbols: list[str]) -> list[dict[str, Any]]:
             forward_pe = info.get("forwardPE")
             dividend_yield = info.get("dividendYield")
 
+            # Short interest (positioning)
+            short_pct_float = info.get("shortPercentOfFloat")
+            short_ratio = info.get("shortRatio")
+
             # Technicals
             fifty_day_avg = info.get("fiftyDayAverage")
             two_hundred_day_avg = info.get("twoHundredDayAverage")
@@ -173,6 +183,8 @@ def get_ticker_screen_data_batch(symbols: list[str]) -> list[dict[str, Any]]:
                 "trailing_pe": trailing_pe,
                 "forward_pe": forward_pe,
                 "dividend_yield": dividend_yield,
+                "short_pct_float": short_pct_float,
+                "short_ratio": short_ratio,
                 "fifty_day_avg": fifty_day_avg,
                 "two_hundred_day_avg": two_hundred_day_avg,
                 "fifty_two_week_high": fifty_two_week_high,

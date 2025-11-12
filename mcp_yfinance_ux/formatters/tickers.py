@@ -109,6 +109,23 @@ def format_ticker(data: dict[str, Any]) -> str:  # noqa: PLR0912, PLR0915
         lines.append(f"Idio Vol         {idio_vol:4.1f}%   {risk_level}")
     if total_vol is not None:
         lines.append(f"Total Vol        {total_vol:4.1f}%")
+
+    # Short Interest (positioning risk)
+    short_pct_float = data.get("short_pct_float")
+    short_ratio = data.get("short_ratio")
+    if short_pct_float is not None or short_ratio is not None:
+        if short_pct_float is not None:
+            # Convert from decimal to percentage if needed
+            short_pct = short_pct_float * 100 if short_pct_float < 1 else short_pct_float
+            squeeze_signal = ""
+            if short_pct > 20:  # noqa: PLR2004
+                squeeze_signal = "(High squeeze risk)"
+            elif short_pct > 10:  # noqa: PLR2004
+                squeeze_signal = "(Moderate short interest)"
+            lines.append(f"Short % Float    {short_pct:4.1f}%   {squeeze_signal}")
+        if short_ratio is not None:
+            lines.append(f"Days to Cover    {short_ratio:4.1f}")
+
     lines.append("")
 
     # Valuation
@@ -248,7 +265,7 @@ def format_ticker_batch(data_list: list[dict[str, Any]]) -> str:
     # Header
     header = (
         f"{'SYMBOL':8} {'NAME':30} {'PRICE':>10} {'CHG%':>8} "
-        f"{'BETA':>6} {'IDIO':>6} {'MOM1W':>8} {'MOM1M':>8} {'MOM1Y':>8} "
+        f"{'BETA':>6} {'IDIO':>6} {'SHORT%':>8} {'MOM1W':>8} {'MOM1M':>8} {'MOM1Y':>8} "
         f"{'P/E':>8} {'DIV%':>6} {'RSI':>6}"
     )
     lines.append(header)
@@ -267,6 +284,7 @@ def format_ticker_batch(data_list: list[dict[str, Any]]) -> str:
         change_pct = data.get("change_percent")
         beta_spx = data.get("beta_spx")
         idio_vol = data.get("idio_vol")
+        short_pct_float = data.get("short_pct_float")
         mom_1w = data.get("momentum_1w")
         mom_1m = data.get("momentum_1m")
         mom_1y = data.get("momentum_1y")
@@ -279,6 +297,12 @@ def format_ticker_batch(data_list: list[dict[str, Any]]) -> str:
         chg_str = f"{change_pct:+7.2f}%" if change_pct is not None else " " * 8
         beta_str = f"{beta_spx:6.2f}" if beta_spx is not None else " " * 6
         idio_str = f"{idio_vol:5.1f}%" if idio_vol is not None else " " * 6
+        # Convert short % from decimal to percentage
+        if short_pct_float is not None:
+            short_pct = short_pct_float * 100 if short_pct_float < 1 else short_pct_float
+            short_str = f"{short_pct:7.1f}%"
+        else:
+            short_str = " " * 8
         mom_1w_str = f"{mom_1w:+7.1f}%" if mom_1w is not None else " " * 8
         mom_1m_str = f"{mom_1m:+7.1f}%" if mom_1m is not None else " " * 8
         mom_1y_str = f"{mom_1y:+7.1f}%" if mom_1y is not None else " " * 8
@@ -288,7 +312,7 @@ def format_ticker_batch(data_list: list[dict[str, Any]]) -> str:
 
         line = (
             f"{symbol:8} {name:30} {price_str} {chg_str} "
-            f"{beta_str} {idio_str} {mom_1w_str} {mom_1m_str} {mom_1y_str} "
+            f"{beta_str} {idio_str} {short_str} {mom_1w_str} {mom_1m_str} {mom_1y_str} "
             f"{pe_str} {div_str} {rsi_str}"
         )
         lines.append(line)
