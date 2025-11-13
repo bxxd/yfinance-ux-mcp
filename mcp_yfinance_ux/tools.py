@@ -88,6 +88,12 @@ BATCH: ticker(['TSLA', 'F', 'GM'])
 - Mom (1W/1M/1Y), P/E, Div%, RSI
 
 Single = deep dive. Batch = compare.
+
+MACRO FACTORS (for Paleologo regression analysis):
+- Treasury Rates: ^TNX (10Y), ^IRX (2Y), ^TYX (30Y), ^FVX (5Y)
+- Commodities: CL=F (Oil WTI), NG=F (Nat Gas), GC=F (Gold), SI=F (Silver)
+- Volatility: ^VIX
+- Currencies: EURUSD=X, JPY=X, CNY=X, GBPUSD=X
 """,
             inputSchema={
                 "type": "object",
