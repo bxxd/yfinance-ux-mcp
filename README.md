@@ -46,6 +46,34 @@ Dense, scannable, professional. Not raw JSON - formatted for humans, AI benefits
 - **Calendar integration** - Earnings dates, dividend schedules
 - **BBG Lite formatting** - Dense, scannable, professional output
 
+## Library Architecture
+
+**mcp-yfinance-ux includes a reusable library for reliable yfinance data fetching.**
+
+### lib/yfinance_fetcher.py
+
+**ONE SOURCE OF TRUTH for yfinance fetching logic:**
+- Individual `yf.Ticker().history()` calls with ThreadPoolExecutor (RELIABLE)
+- NOT `yf.download()` batch API (UNRELIABLE - timeouts, fails entire batch)
+
+**Used by:**
+1. **MCP server** - `mcp_yfinance_ux/historical.py` imports from `lib/`
+2. **Portfolio scripts** - Can be copied to portfolio agents for reliable fetching
+3. **Any Python code** - Pure logic, no MCP dependencies
+
+**Key functions:**
+- `fetch_price_history(symbol, months=12)` - Single symbol history
+- `fetch_multiple_histories(symbols, months=12)` - Parallel multi-symbol fetch
+- `fetch_ticker_and_market(symbol, months=12)` - Ticker + market data (for factor analysis)
+- `fetch_price_at_date(symbol, date)` - Price at specific date (narrow window)
+
+**Why this pattern works:**
+- Individual fetches don't fail as a batch
+- ThreadPoolExecutor provides parallelism without batch API
+- Proven in production use (MCP server serving real users)
+
+**Documentation:** See `lib/README.md` for usage examples and deployment workflow.
+
 ## Important: Usage Limitations
 
 **This tool is designed for ad-hoc, user-initiated requests only. Not for automation.**

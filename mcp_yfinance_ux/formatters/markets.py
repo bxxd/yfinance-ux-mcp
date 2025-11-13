@@ -8,13 +8,13 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from mcp_yfinance_ux.common.constants import (
+from yfinance_ux.common.constants import (
     DISPLAY_NAMES,
     FORMATTING_SECTIONS,
     MARKET_SYMBOLS,
     SECTION_REGION_MAP,
 )
-from mcp_yfinance_ux.common.dates import (
+from yfinance_ux.common.dates import (
     get_market_status,
     is_futures_open,
     is_market_open,

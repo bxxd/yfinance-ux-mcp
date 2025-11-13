@@ -10,9 +10,9 @@ from typing import Any
 
 import yfinance as yf  # type: ignore[import-untyped]
 
-from mcp_yfinance_ux.calculations.momentum import calculate_momentum
-from mcp_yfinance_ux.common.constants import DISPLAY_NAMES, MARKET_SYMBOLS
-from mcp_yfinance_ux.services.markets import get_ticker_full_data
+from yfinance_ux.calculations.momentum import calculate_momentum
+from yfinance_ux.common.constants import DISPLAY_NAMES, MARKET_SYMBOLS
+from yfinance_ux.services.markets import get_ticker_full_data
 
 
 def get_sector_data(name: str) -> dict[str, Any]:

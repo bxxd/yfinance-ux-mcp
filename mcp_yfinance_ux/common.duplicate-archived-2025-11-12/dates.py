@@ -8,7 +8,7 @@ Used for market status display and timing-aware data fetching.
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from mcp_yfinance_ux.common.constants import FRIDAY, SATURDAY, SUNDAY, WEEKEND_START_DAY
+from yfinance_ux.common.constants import FRIDAY, SATURDAY, SUNDAY, WEEKEND_START_DAY
 
 
 def is_market_open() -> bool:

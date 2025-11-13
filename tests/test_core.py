@@ -11,7 +11,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from mcp_yfinance_ux.common.dates import is_market_open
+from yfinance_ux.common.dates import is_market_open
 from mcp_yfinance_ux.market_data import (
     get_ticker_data,
     get_market_snapshot,

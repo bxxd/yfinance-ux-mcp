@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from mcp_yfinance_ux.common.constants import (
+from yfinance_ux.common.constants import (
     BETA_HIGH_THRESHOLD,
     BETA_LOW_THRESHOLD,
     IDIO_VOL_HIGH_THRESHOLD,

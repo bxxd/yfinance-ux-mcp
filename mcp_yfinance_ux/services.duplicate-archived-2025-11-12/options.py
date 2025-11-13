@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 import yfinance as yf  # type: ignore[import-untyped]
 
-from mcp_yfinance_ux.common.symbols import normalize_ticker_symbol
+from yfinance_ux.common.symbols import normalize_ticker_symbol
 
 
 def get_options_data(symbol: str, expiration: str = "nearest") -> dict[str, Any]:  # noqa: PLR0915, PLR0912

@@ -9,12 +9,12 @@ from typing import Any
 
 import yfinance as yf  # type: ignore[import-untyped]
 
-from mcp_yfinance_ux.calculations.momentum import calculate_momentum
-from mcp_yfinance_ux.calculations.technical import calculate_rsi
-from mcp_yfinance_ux.calculations.volatility import calculate_idio_vol
-from mcp_yfinance_ux.common.constants import RSI_PERIOD
-from mcp_yfinance_ux.common.symbols import normalize_ticker_symbol
-from mcp_yfinance_ux.services.options import get_options_data
+from yfinance_ux.calculations.momentum import calculate_momentum
+from yfinance_ux.calculations.technical import calculate_rsi
+from yfinance_ux.calculations.volatility import calculate_idio_vol
+from yfinance_ux.common.constants import RSI_PERIOD
+from yfinance_ux.common.symbols import normalize_ticker_symbol
+from yfinance_ux.services.options import get_options_data
 
 
 def get_ticker_screen_data(symbol: str) -> dict[str, Any]:

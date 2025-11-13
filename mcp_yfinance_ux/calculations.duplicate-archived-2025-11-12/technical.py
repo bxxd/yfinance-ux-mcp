@@ -8,7 +8,7 @@ from typing import Any
 
 import numpy as np
 
-from mcp_yfinance_ux.common.constants import RSI_PERIOD
+from yfinance_ux.common.constants import RSI_PERIOD
 
 
 def calculate_rsi(prices: Any, period: int = RSI_PERIOD) -> float | None:  # noqa: ANN401
